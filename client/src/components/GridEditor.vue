@@ -180,30 +180,43 @@
     </div>
 
     <!-- Main Grid Canvas Area -->
-    <div class="canvas-container">
+    <div
+      ref="canvasContainerRef"
+      class="canvas-container"
+      :class="{ 'is-panning': isPanning }"
+      @wheel.prevent="handleWheel"
+      @mousedown="handleMouseDown"
+      @mouseleave="hoverCell = null"
+    >
       <div
-        class="grid-board"
+        class="viewport-layer"
         :style="{
-          gridTemplateColumns: `repeat(${worldWidth}, minmax(34px, 1fr))`,
-          gridTemplateRows: `repeat(${worldHeight}, minmax(34px, 1fr))`
+          transform: `translate(${panX}px, ${panY}px) scale(${zoomLevel})`
         }"
-        @mouseleave="hoverCell = null"
       >
         <div
-          v-for="cell in flatGridCells"
-          :key="`${cell.r}-${cell.c}`"
-          class="grid-cell"
-          :class="{
-            'hovered': hoverCell?.r === cell.r && hoverCell?.c === cell.c,
-            'in-dispersion': isCellInDispersion(cell.r, cell.c)
+          class="grid-board"
+          :style="{
+            gridTemplateColumns: `repeat(${worldWidth}, 30px)`,
+            gridTemplateRows: `repeat(${worldHeight}, 30px)`
           }"
-          :style="{ backgroundColor: getCellColor(cell.value) }"
-          @mouseenter="hoverCell = { r: cell.r, c: cell.c }"
-          @click="handleCellClick(cell.r, cell.c)"
         >
-          <span v-if="showCellValues" class="cell-text">
-            {{ formatCellValue(cell.value) }}
-          </span>
+          <div
+            v-for="cell in flatGridCells"
+            :key="`${cell.r}-${cell.c}`"
+            class="grid-cell"
+            :class="{
+              'hovered': hoverCell?.r === cell.r && hoverCell?.c === cell.c,
+              'in-dispersion': isCellInDispersion(cell.r, cell.c)
+            }"
+            :style="{ backgroundColor: getCellColor(cell.value) }"
+            @mouseenter="hoverCell = { r: cell.r, c: cell.c }"
+            @click="handleCellClick(cell.r, cell.c)"
+          >
+            <span v-if="showCellValues" class="cell-text">
+              {{ formatCellValue(cell.value) }}
+            </span>
+          </div>
         </div>
       </div>
     </div>
@@ -318,6 +331,23 @@ let playbackTimer: number | null = null;
 
 // Hover state
 const hoverCell = ref<{ r: number; c: number } | null>(null);
+
+// Zoom & Pan state
+const canvasContainerRef = ref<HTMLElement | null>(null);
+const zoomLevel = ref(1);
+const panX = ref(0);
+const panY = ref(0);
+const isPanning = ref(false);
+let panStartX = 0;
+let panStartY = 0;
+let panStartPanX = 0;
+let panStartPanY = 0;
+let didDrag = false;
+
+const MIN_ZOOM = 0.3;
+const MAX_ZOOM = 4;
+const ZOOM_SENSITIVITY = 0.002;
+const PAN_THRESHOLD = 4;
 
 const isEditingEnabled = computed(() => {
   if (props.variable.gridType === 'static') return true;
@@ -476,6 +506,7 @@ function isCellInDispersion(r: number, c: number): boolean {
 }
 
 function handleCellClick(targetR: number, targetC: number) {
+  if (didDrag) return;
   if (!isEditingEnabled.value) return;
 
   const isCategorical = props.variable.variableType === 'categorical';
@@ -588,8 +619,70 @@ function pausePlayback() {
   }
 }
 
+// Zoom & Pan handlers
+function handleWheel(e: WheelEvent) {
+  const container = canvasContainerRef.value;
+  if (!container) return;
+
+  const rect = container.getBoundingClientRect();
+  // Mouse position relative to container center
+  const mouseX = e.clientX - rect.left - rect.width / 2;
+  const mouseY = e.clientY - rect.top - rect.height / 2;
+
+  const oldZoom = zoomLevel.value;
+  const delta = -e.deltaY * ZOOM_SENSITIVITY;
+  const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, oldZoom * (1 + delta)));
+
+  // Adjust pan so zoom is centered on mouse position
+  const scaleFactor = newZoom / oldZoom;
+  panX.value = mouseX - scaleFactor * (mouseX - panX.value);
+  panY.value = mouseY - scaleFactor * (mouseY - panY.value);
+  zoomLevel.value = newZoom;
+}
+
+function handleMouseDown(e: MouseEvent) {
+  // Left button drag for panning
+  if (e.button === 0) {
+    e.preventDefault();
+    didDrag = false;
+    panStartX = e.clientX;
+    panStartY = e.clientY;
+    panStartPanX = panX.value;
+    panStartPanY = panY.value;
+
+    window.addEventListener('mousemove', handlePanMove);
+    window.addEventListener('mouseup', handlePanEnd);
+  }
+}
+
+function handlePanMove(e: MouseEvent) {
+  const dx = e.clientX - panStartX;
+  const dy = e.clientY - panStartY;
+
+  // Only start panning after exceeding the threshold
+  if (!isPanning.value) {
+    if (Math.abs(dx) > PAN_THRESHOLD || Math.abs(dy) > PAN_THRESHOLD) {
+      isPanning.value = true;
+      didDrag = true;
+    } else {
+      return;
+    }
+  }
+
+  panX.value = panStartPanX + dx;
+  panY.value = panStartPanY + dy;
+}
+
+function handlePanEnd() {
+  isPanning.value = false;
+  window.removeEventListener('mousemove', handlePanMove);
+  window.removeEventListener('mouseup', handlePanEnd);
+}
+
 onUnmounted(() => {
   pausePlayback();
+  window.removeEventListener('mousemove', handlePanMove);
+  window.removeEventListener('mouseup', handlePanEnd);
 });
 </script>
 
@@ -872,12 +965,22 @@ onUnmounted(() => {
 /* Grid Area */
 .canvas-container {
   flex: 1;
-  overflow: auto;
+  overflow: hidden;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 1.5rem;
   background: #080e1e;
+  position: relative;
+  cursor: grab;
+}
+
+.canvas-container.is-panning {
+  cursor: grabbing;
+}
+
+.viewport-layer {
+  transform-origin: center center;
+  will-change: transform;
 }
 
 .grid-board {
@@ -887,13 +990,11 @@ onUnmounted(() => {
   padding: 4px;
   border-radius: 6px;
   box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.4);
-  max-width: 90vw;
-  max-height: 70vh;
 }
 
 .grid-cell {
-  width: 46px;
-  height: 46px;
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -916,14 +1017,14 @@ onUnmounted(() => {
 }
 
 .cell-text {
-  font-size: 0.6rem;
+  font-size: 0.55rem;
   font-weight: 600;
   color: #0f172a;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 42px;
-  padding: 0 2px;
+  max-width: 28px;
+  padding: 0 1px;
 }
 
 /* Footer / Legend */
