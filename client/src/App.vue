@@ -31,6 +31,7 @@
           :variable="selectedVariable"
           :worldWidth="world.width"
           :worldHeight="world.height"
+          :world="world"
           @variableUpdated="handleVariableUpdated"
         />
         <div v-else class="empty-selection">

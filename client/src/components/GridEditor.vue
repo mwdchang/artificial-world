@@ -64,7 +64,9 @@
       </div>
 
       <div v-else-if="isMovement" class="tool-section movement-hint">
-        <span class="cube-inspect-badge">Click a cell to edit its 8 direction rates</span>
+        <button class="btn btn-primary btn-sm" @click="openAlgorithmDialog">
+          Custom Algorithm
+        </button>
       </div>
 
       <div v-else class="tool-section read-only-hint">
@@ -225,6 +227,40 @@
       </div>
     </div>
 
+    <!-- Custom Movement Algorithm Dialog -->
+    <div
+      v-if="showAlgorithmDialog"
+      class="algorithm-backdrop"
+      @click.self="closeAlgorithmDialog"
+    >
+      <div class="algorithm-dialog">
+        <h3>Custom Movement Algorithm</h3>
+        <p class="algorithm-help">
+          Define <code>callback(i, j, world)</code> &mdash; <code>i</code> is the row,
+          <code>j</code> is the column. Return all 8 rates
+          (<code>n, s, e, w, ne, nw, se, sw</code>) as numbers between 0 and 1.
+        </p>
+
+        <textarea
+          v-model="algorithmCode"
+          class="algorithm-textarea"
+          spellcheck="false"
+          rows="12"
+        />
+
+        <div v-if="algorithmError" class="algorithm-error">{{ algorithmError }}</div>
+
+        <div class="algorithm-actions">
+          <button class="btn btn-secondary btn-sm" @click="closeAlgorithmDialog">
+            Cancel
+          </button>
+          <button class="btn btn-primary btn-sm" @click="generateAlgorithm">
+            Generate
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Movement Cell Editor Popover -->
     <div
       v-if="movementEditor"
@@ -329,7 +365,7 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue';
-import type { Variable, MovementRates } from '../types/world';
+import type { Variable, MovementRates, World } from '../types/world';
 import {
   MOVEMENT_DIRECTIONS,
   createDefaultMovementRates,
@@ -347,6 +383,7 @@ const props = defineProps<{
   variable: Variable;
   worldWidth: number;
   worldHeight: number;
+  world: World;
 }>();
 
 const emit = defineEmits<{
@@ -435,6 +472,15 @@ const movementEditor = ref<{
   y: number;
   rates: MovementRates;
 } | null>(null);
+
+// Custom movement algorithm dialog state
+const ALGORITHM_STORAGE_KEY = 'artificial_world';
+const DEFAULT_ALGORITHM_TEMPLATE = `function callback(i, j, world) {
+  return { n: 0.01, s: 0.01, e: 0.01, w: 0.01, ne: 0.01, nw: 0.01, se: 0.01, sw: 0.01 };
+}`;
+const showAlgorithmDialog = ref(false);
+const algorithmCode = ref('');
+const algorithmError = ref('');
 
 // Current active 2D grid for display
 const activeGrid = computed<any[][]>(() => {
@@ -714,6 +760,112 @@ function applyMovementEdit() {
   const grid = activeGrid.value;
   if (grid[ed.r]) grid[ed.r][ed.c] = cleaned;
   movementEditor.value = null;
+  emit('variableUpdated', props.variable);
+}
+
+// Persist draft algorithm code as { [worldName]: { [variableName]: code } }
+function loadAlgorithmCode(worldName: string, variableName: string): string {
+  try {
+    const raw = localStorage.getItem(ALGORITHM_STORAGE_KEY);
+    if (!raw) return '';
+    const all = JSON.parse(raw);
+    return all?.[worldName]?.[variableName] ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function persistAlgorithmCode(worldName: string, variableName: string, code: string) {
+  try {
+    const raw = localStorage.getItem(ALGORITHM_STORAGE_KEY);
+    const all = raw ? JSON.parse(raw) : {};
+    if (!all[worldName]) all[worldName] = {};
+    all[worldName][variableName] = code;
+    localStorage.setItem(ALGORITHM_STORAGE_KEY, JSON.stringify(all));
+  } catch {
+    // Ignore storage failures (private mode, quota, etc.)
+  }
+}
+
+function openAlgorithmDialog() {
+  const saved = loadAlgorithmCode(props.world.name, props.variable.name);
+  algorithmCode.value = saved || DEFAULT_ALGORITHM_TEMPLATE;
+  algorithmError.value = '';
+  showAlgorithmDialog.value = true;
+}
+
+function closeAlgorithmDialog() {
+  persistAlgorithmCode(props.world.name, props.variable.name, algorithmCode.value);
+  showAlgorithmDialog.value = false;
+  algorithmError.value = '';
+}
+
+function generateAlgorithm() {
+  algorithmError.value = '';
+  persistAlgorithmCode(props.world.name, props.variable.name, algorithmCode.value);
+
+  let callback: any;
+  try {
+    const factory = new Function(
+      `${algorithmCode.value}\n;return typeof callback !== 'undefined' ? callback : undefined;`
+    );
+    callback = factory();
+  } catch (err: any) {
+    algorithmError.value = `Syntax error: ${err?.message ?? err}`;
+    return;
+  }
+
+  if (typeof callback !== 'function') {
+    algorithmError.value = 'No function named "callback" was defined.';
+    return;
+  }
+
+  const width = props.worldWidth;
+  const height = props.worldHeight;
+
+  // Snapshot the world so the callback can read it without mutating live state.
+  let worldSnapshot: World;
+  try {
+    worldSnapshot = JSON.parse(JSON.stringify(props.world));
+  } catch {
+    worldSnapshot = props.world;
+  }
+
+  const newMovement: MovementRates[][] = Array.from({ length: height }, () =>
+    new Array(width)
+  );
+
+  for (let i = 0; i < height; i++) {
+    for (let j = 0; j < width; j++) {
+      let result: any;
+      try {
+        result = callback(i, j, worldSnapshot);
+      } catch (err: any) {
+        algorithmError.value = `Error at (${i}, ${j}): ${err?.message ?? err}`;
+        return;
+      }
+
+      if (!result || typeof result !== 'object') {
+        algorithmError.value = `callback(${i}, ${j}) must return an object with all 8 rates.`;
+        return;
+      }
+
+      const cell: MovementRates = createDefaultMovementRates(0);
+      for (const dir of MOVEMENT_DIRECTIONS) {
+        const v = result[dir];
+        if (typeof v !== 'number' || !isFinite(v) || v < 0 || v > 1) {
+          algorithmError.value = `Invalid rate "${dir}" at (${i}, ${j}): ${JSON.stringify(v)}. Must be a number between 0 and 1.`;
+          return;
+        }
+        cell[dir] = v;
+      }
+      newMovement[i][j] = cell;
+    }
+  }
+
+  props.variable.data = newMovement;
+  showAlgorithmDialog.value = false;
+  algorithmError.value = '';
   emit('variableUpdated', props.variable);
 }
 
@@ -1405,5 +1557,94 @@ onUnmounted(() => {
   justify-content: flex-end;
   gap: 0.5rem;
   margin-top: 0.65rem;
+}
+
+.btn-secondary {
+  background: #374151;
+  color: #e5e7eb;
+}
+
+.btn-secondary:hover {
+  background: #4b5563;
+}
+
+/* Custom algorithm dialog */
+.algorithm-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 900;
+}
+
+.algorithm-dialog {
+  width: 620px;
+  max-width: 92vw;
+  background: #111e38;
+  border: 1px solid #334155;
+  border-radius: 10px;
+  padding: 1.25rem;
+  color: #f1f5f9;
+  box-shadow: 0 20px 45px -10px rgba(0, 0, 0, 0.8);
+}
+
+.algorithm-dialog h3 {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.1rem;
+  color: #38bdf8;
+}
+
+.algorithm-help {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: #94a3b8;
+}
+
+.algorithm-help code {
+  background: #0f172a;
+  border: 1px solid #1e293b;
+  border-radius: 3px;
+  padding: 0 0.25rem;
+  color: #e2e8f0;
+}
+
+.algorithm-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: #0b1329;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  color: #e2e8f0;
+  padding: 0.65rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.algorithm-textarea:focus {
+  outline: none;
+  border-color: #38bdf8;
+}
+
+.algorithm-error {
+  margin-top: 0.6rem;
+  background: rgba(153, 27, 27, 0.35);
+  border: 1px solid #b91c1c;
+  color: #fecaca;
+  padding: 0.5rem 0.65rem;
+  border-radius: 5px;
+  font-size: 0.78rem;
+  white-space: pre-wrap;
+}
+
+.algorithm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+  margin-top: 0.9rem;
 }
 </style>
