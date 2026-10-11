@@ -66,6 +66,7 @@ export interface World {
   width: number;
   height: number;
   variables: Variable[];
+  equations: string[];
 }
 
 export function createDefaultWorld(name = 'New World', width = 10, height = 10): World {
@@ -114,5 +115,6 @@ export function createDefaultWorld(name = 'New World', width = 10, height = 10):
     width,
     height,
     variables: [landVariable, temperatureVariable],
+    equations: [],
   };
 }

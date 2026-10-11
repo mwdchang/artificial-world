@@ -5,6 +5,13 @@
       <nav class="tab-nav">
         <button
           class="tab-btn"
+          :class="{ active: currentTab === 'model' }"
+          @click="$emit('update:currentTab', 'model')"
+        >
+          Model
+        </button>
+        <button
+          class="tab-btn"
           :class="{ active: currentTab === 'build' }"
           @click="$emit('update:currentTab', 'build')"
         >
@@ -20,8 +27,8 @@
       </nav>
     </div>
 
-    <!-- Summary & Controls (visible on Build tab) -->
-    <div v-if="currentTab === 'build'" class="world-summary">
+    <!-- Summary & Controls (visible on Model and Build tabs) -->
+    <div v-if="currentTab === 'build' || currentTab === 'model'" class="world-summary">
       <div class="summary-item">
         <label>World Name:</label>
         <input
@@ -128,11 +135,11 @@ import { fetchWorldNames, fetchWorld, saveWorld } from '../api/worldApi';
 
 const props = defineProps<{
   world: World;
-  currentTab: 'build' | 'simulate';
+  currentTab: 'model' | 'build' | 'simulate';
 }>();
 
 const emit = defineEmits<{
-  (e: 'update:currentTab', tab: 'build' | 'simulate'): void;
+  (e: 'update:currentTab', tab: 'model' | 'build' | 'simulate'): void;
   (e: 'update:world', world: World): void;
   (e: 'createNewWorld', payload: { name: string; width: number; height: number }): void;
 }>();

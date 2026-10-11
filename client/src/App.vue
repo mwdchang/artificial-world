@@ -11,8 +11,11 @@
 
     <!-- Main View Content -->
     <div class="app-body">
+      <!-- Model Tab -->
+      <ModelTab v-if="currentTab === 'model'" :world="world" />
+
       <!-- Build Tab -->
-      <template v-if="currentTab === 'build'">
+      <template v-else-if="currentTab === 'build'">
         <!-- Left Pane: Variable Selector -->
         <VariableList
           :variables="world.variables"
@@ -50,13 +53,14 @@ import { ref, computed } from 'vue';
 import type { World, Variable } from './types/world';
 import { createDefaultWorld } from './types/world';
 import TopBar from './components/TopBar.vue';
+import ModelTab from './components/ModelTab.vue';
 import VariableList from './components/VariableList.vue';
 import GridEditor from './components/GridEditor.vue';
 import SimulateTab from './components/SimulateTab.vue';
 
 // Initialize with predefined variables (land, temperature)
 const world = ref<World>(createDefaultWorld('TestWorld', 10, 10));
-const currentTab = ref<'build' | 'simulate'>('build');
+const currentTab = ref<'model' | 'build' | 'simulate'>('build');
 const selectedVariableIndex = ref<number>(0);
 
 const selectedVariable = computed<Variable | null>(() => {
@@ -75,6 +79,10 @@ function handleCreateNewWorld(payload: { name: string; width: number; height: nu
 }
 
 function handleWorldLoaded(loaded: World) {
+  // Backwards compatibility: older saved worlds may not have equations.
+  if (!Array.isArray(loaded.equations)) {
+    loaded.equations = [];
+  }
   world.value = loaded;
   selectedVariableIndex.value = 0;
 }
