@@ -1,2 +1,5 @@
 node_modules
 worlds
+/*.json
+/*.gif
+__pycache__

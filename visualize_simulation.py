@@ -8,6 +8,7 @@ matplotlib.use("Agg")
 import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.colors import SymLogNorm
 
 
 def load_simulation(path):
@@ -46,6 +47,8 @@ def make_gif(
     per_state=False,
     dpi=100,
     loop=0,
+    log_scale=False,
+    linthresh=1.0,
 ):
     names, arrays, times = load_simulation(path)
     frames = len(times)
@@ -66,13 +69,27 @@ def make_gif(
     images = []
     for ax, name in zip(axes, names):
         lo, hi = clims[name]
-        img = ax.imshow(
-            arrays[name][0],
-            cmap=cmap,
-            vmin=lo,
-            vmax=hi,
-            interpolation="nearest",
-        )
+        if log_scale:
+            # SymLogNorm keeps zeros (and negatives) valid: values within
+            # +/-linthresh are shown on a linear scale, beyond it on a log
+            # scale. Guard against a flat range so the norm stays valid.
+            if hi <= lo:
+                hi = lo + max(linthresh, 1.0)
+            norm = SymLogNorm(linthresh=linthresh, vmin=lo, vmax=hi)
+            img = ax.imshow(
+                arrays[name][0],
+                cmap=cmap,
+                norm=norm,
+                interpolation="nearest",
+            )
+        else:
+            img = ax.imshow(
+                arrays[name][0],
+                cmap=cmap,
+                vmin=lo,
+                vmax=hi,
+                interpolation="nearest",
+            )
         ax.set_title(name)
         ax.set_xticks([])
         ax.set_yticks([])
@@ -126,6 +143,17 @@ def main():
     parser.add_argument(
         "--dpi", type=int, default=100, help="Output resolution (default: 100)."
     )
+    parser.add_argument(
+        "--log-scale",
+        action="store_true",
+        help="Use a symlog color scale (handles zeros and negatives).",
+    )
+    parser.add_argument(
+        "--linthresh",
+        type=float,
+        default=1.0,
+        help="Symlog linear region +/- this value around zero (default: 1.0).",
+    )
     args = parser.parse_args()
 
     output = make_gif(
@@ -135,6 +163,8 @@ def main():
         cmap=args.cmap,
         per_state=args.per_state,
         dpi=args.dpi,
+        log_scale=args.log_scale,
+        linthresh=args.linthresh,
     )
     print(f"Wrote {output}")
 
