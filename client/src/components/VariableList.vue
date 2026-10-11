@@ -31,7 +31,13 @@
             {{ v.gridType === 'static' ? 'Static' : 'Time-Varying' }}
           </span>
           <span class="badge" :class="v.variableType">
-            {{ v.variableType === 'numeric' ? 'Numeric' : 'Categorical' }}
+            {{
+              v.variableType === 'numeric'
+                ? 'Numeric'
+                : v.variableType === 'categorical'
+                  ? 'Categorical'
+                  : 'Movement'
+            }}
           </span>
         </div>
       </div>
@@ -60,7 +66,12 @@
               Static
             </label>
             <label class="radio-label">
-              <input v-model="newGridType" type="radio" value="timeVarying" />
+              <input
+                v-model="newGridType"
+                type="radio"
+                value="timeVarying"
+                :disabled="newVarType === 'movement'"
+              />
               Time-Varying
             </label>
           </div>
@@ -82,9 +93,21 @@
               <input v-model="newVarType" type="radio" value="numeric" />
               Numeric
             </label>
+            <label class="radio-label" :class="{ disabled: newGridType === 'timeVarying' }">
+              <input
+                v-model="newVarType"
+                type="radio"
+                value="movement"
+                :disabled="newGridType === 'timeVarying'"
+              />
+              Movement
+            </label>
           </div>
           <span v-if="newGridType === 'timeVarying'" class="field-note">
             * Time-varying variables can only be numerical.
+          </span>
+          <span v-else-if="newVarType === 'movement'" class="field-note">
+            * Movement variables are always static. Rates must be between 0 and 1.
           </span>
         </div>
 
@@ -102,6 +125,17 @@
           <input v-model.number="newDefaultNumeric" type="number" step="any" />
         </div>
 
+        <div v-if="newVarType === 'movement'" class="form-group">
+          <label>Default Movement Rate (all directions)</label>
+          <input
+            v-model.number="newDefaultMovement"
+            type="number"
+            step="0.01"
+            min="0"
+            max="1"
+          />
+        </div>
+
         <div class="modal-actions">
           <button class="btn btn-secondary" @click="showAddModal = false">Cancel</button>
           <button class="btn btn-primary" :disabled="!isFormValid" @click="confirmAdd">
@@ -116,6 +150,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import type { Variable, GridType, VariableType } from '../types/world';
+import { createDefaultMovementRates } from '../types/world';
 import { generateDataCube } from '../utils/interpolation';
 
 const props = defineProps<{
@@ -138,11 +173,19 @@ const newGridType = ref<GridType>('static');
 const newVarType = ref<VariableType>('numeric');
 const newCategoriesInput = ref('catA, catB, catC');
 const newDefaultNumeric = ref(0);
+const newDefaultMovement = ref(0.01);
 
 // Auto-switch variableType to numeric if timeVarying is selected
 watch(newGridType, (val) => {
   if (val === 'timeVarying') {
     newVarType.value = 'numeric';
+  }
+});
+
+// Movement variables are always static
+watch(newVarType, (val) => {
+  if (val === 'movement') {
+    newGridType.value = 'static';
   }
 });
 
@@ -162,7 +205,21 @@ function confirmAdd() {
   const width = props.worldWidth;
   const height = props.worldHeight;
 
-  if (newGridType.value === 'static') {
+  if (newVarType.value === 'movement') {
+    const rate = Math.max(0, Math.min(1, Number(newDefaultMovement.value) || 0));
+    const data = Array.from({ length: height }, () =>
+      Array.from({ length: width }, () => createDefaultMovementRates(rate))
+    );
+
+    emit('addVariable', {
+      name,
+      gridType: 'static',
+      variableType: 'movement',
+      categories: null,
+      keyframes: null,
+      data,
+    });
+  } else if (newGridType.value === 'static') {
     if (newVarType.value === 'categorical') {
       const categories = newCategoriesInput.value
         .split(',')
@@ -227,6 +284,9 @@ function confirmAdd() {
   newVarName.value = '';
   newCategoriesInput.value = 'catA, catB, catC';
   newDefaultNumeric.value = 0;
+  newDefaultMovement.value = 0.01;
+  newVarType.value = 'numeric';
+  newGridType.value = 'static';
   showAddModal.value = false;
 }
 
@@ -356,6 +416,11 @@ function confirmDelete(idx: number) {
 }
 
 .badge.categorical {
+  background: #555;
+  color: #eee;
+}
+
+.badge.movement {
   background: #555;
   color: #eee;
 }

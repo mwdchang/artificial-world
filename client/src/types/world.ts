@@ -1,9 +1,53 @@
 export type GridType = 'static' | 'timeVarying';
-export type VariableType = 'numeric' | 'categorical';
+export type VariableType = 'numeric' | 'categorical' | 'movement';
 
 export interface Keyframe {
   step: number;
   data: number[][];
+}
+
+export interface MovementRates {
+  n: number;
+  s: number;
+  e: number;
+  w: number;
+  ne: number;
+  nw: number;
+  se: number;
+  sw: number;
+}
+
+// Compass order used for display and summation.
+export const MOVEMENT_DIRECTIONS: (keyof MovementRates)[] = [
+  'nw',
+  'n',
+  'ne',
+  'w',
+  'e',
+  'sw',
+  's',
+  'se',
+];
+
+export function createDefaultMovementRates(rate = 0.01): MovementRates {
+  return {
+    n: rate,
+    s: rate,
+    e: rate,
+    w: rate,
+    ne: rate,
+    nw: rate,
+    se: rate,
+    sw: rate,
+  };
+}
+
+export function movementSum(rates: any): number {
+  if (!rates || typeof rates !== 'object') return 0;
+  return MOVEMENT_DIRECTIONS.reduce(
+    (total, dir) => total + (Number(rates[dir]) || 0),
+    0
+  );
 }
 
 export interface Variable {

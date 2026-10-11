@@ -34,7 +34,7 @@
     <!-- Toolbar: Editing controls & Color scales -->
     <div class="editor-toolbar">
       <!-- Brush / Value selector -->
-      <div v-if="isEditingEnabled" class="tool-section">
+      <div v-if="isEditingEnabled && !isMovement" class="tool-section">
         <span class="tool-label">
           {{ variable.variableType === 'categorical' ? 'Tile:' : 'Value:' }}
         </span>
@@ -63,12 +63,16 @@
         </div>
       </div>
 
+      <div v-else-if="isMovement" class="tool-section movement-hint">
+        <span class="cube-inspect-badge">Click a cell to edit its 8 direction rates</span>
+      </div>
+
       <div v-else class="tool-section read-only-hint">
         <span class="cube-inspect-badge">Data Cube Playback Mode (Read-Only)</span>
       </div>
 
       <!-- Dispersion Slider (0 to 5) -->
-      <div v-if="isEditingEnabled" class="tool-section dispersion-control">
+      <div v-if="isEditingEnabled && !isMovement" class="tool-section dispersion-control">
         <label for="dispersionSlider" class="tool-label" :title="dispersionTooltip">
           Disperse: <strong class="dispersion-value">{{ dispersionRadius }}</strong>
         </label>
@@ -211,12 +215,73 @@
             }"
             :style="{ backgroundColor: getCellColor(cell.value) }"
             @mouseenter="hoverCell = { r: cell.r, c: cell.c }"
-            @click="handleCellClick(cell.r, cell.c)"
+            @click="handleCellClick(cell.r, cell.c, $event)"
           >
             <span v-if="showCellValues" class="cell-text">
               {{ formatCellValue(cell.value) }}
             </span>
           </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Movement Cell Editor Popover -->
+    <div
+      v-if="movementEditor"
+      class="movement-popover-backdrop"
+      @click.self="movementEditor = null"
+    >
+      <div class="movement-popover" :style="popoverStyle">
+        <div class="mp-header">
+          <span>Cell [{{ movementEditor.c }}, {{ movementEditor.r }}]</span>
+          <button class="mp-close" @click="movementEditor = null">&times;</button>
+        </div>
+
+        <div class="movement-compass">
+          <label class="mc-cell">
+            <span class="mc-dir">NW</span>
+            <input v-model.number="movementEditor.rates.nw" type="number" min="0" max="1" step="0.01" />
+          </label>
+          <label class="mc-cell">
+            <span class="mc-dir">N</span>
+            <input v-model.number="movementEditor.rates.n" type="number" min="0" max="1" step="0.01" />
+          </label>
+          <label class="mc-cell">
+            <span class="mc-dir">NE</span>
+            <input v-model.number="movementEditor.rates.ne" type="number" min="0" max="1" step="0.01" />
+          </label>
+          <label class="mc-cell">
+            <span class="mc-dir">W</span>
+            <input v-model.number="movementEditor.rates.w" type="number" min="0" max="1" step="0.01" />
+          </label>
+          <div class="mc-cell mc-center" :title="'Sum of all outgoing rates'">
+            &Sigma; {{ editorSum.toFixed(2) }}
+          </div>
+          <label class="mc-cell">
+            <span class="mc-dir">E</span>
+            <input v-model.number="movementEditor.rates.e" type="number" min="0" max="1" step="0.01" />
+          </label>
+          <label class="mc-cell">
+            <span class="mc-dir">SW</span>
+            <input v-model.number="movementEditor.rates.sw" type="number" min="0" max="1" step="0.01" />
+          </label>
+          <label class="mc-cell">
+            <span class="mc-dir">S</span>
+            <input v-model.number="movementEditor.rates.s" type="number" min="0" max="1" step="0.01" />
+          </label>
+          <label class="mc-cell">
+            <span class="mc-dir">SE</span>
+            <input v-model.number="movementEditor.rates.se" type="number" min="0" max="1" step="0.01" />
+          </label>
+        </div>
+
+        <div class="mp-actions">
+          <button class="btn btn-outline btn-sm" @click="resetMovementEditor">
+            Reset 0.01
+          </button>
+          <button class="btn btn-primary btn-sm" @click="applyMovementEdit">
+            Apply
+          </button>
         </div>
       </div>
     </div>
@@ -264,7 +329,12 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue';
-import type { Variable } from '../types/world';
+import type { Variable, MovementRates } from '../types/world';
+import {
+  MOVEMENT_DIRECTIONS,
+  createDefaultMovementRates,
+  movementSum,
+} from '../types/world';
 import { generateDataCube } from '../utils/interpolation';
 import {
   CATEGORICAL_PALETTES,
@@ -295,6 +365,7 @@ watch(
     viewMode.value = 'keyframe';
     selectedKeyframeIndex.value = 0;
     currentStepIndex.value = 0;
+    movementEditor.value = null;
     if (props.variable.variableType === 'categorical' && props.variable.categories?.length) {
       selectedCategory.value = props.variable.categories[0];
     }
@@ -354,6 +425,17 @@ const isEditingEnabled = computed(() => {
   return viewMode.value === 'keyframe';
 });
 
+const isMovement = computed(() => props.variable.variableType === 'movement');
+
+// Movement cell editor popover state
+const movementEditor = ref<{
+  r: number;
+  c: number;
+  x: number;
+  y: number;
+  rates: MovementRates;
+} | null>(null);
+
 // Current active 2D grid for display
 const activeGrid = computed<any[][]>(() => {
   if (props.variable.gridType === 'static') {
@@ -378,7 +460,12 @@ const flatGridCells = computed(() => {
   const grid = activeGrid.value;
   for (let r = 0; r < props.worldHeight; r++) {
     for (let c = 0; c < props.worldWidth; c++) {
-      const val = grid[r]?.[c] ?? (props.variable.variableType === 'numeric' ? 0 : 'unknown');
+      const fallback = isMovement.value
+        ? createDefaultMovementRates()
+        : props.variable.variableType === 'numeric'
+          ? 0
+          : 'unknown';
+      const val = grid[r]?.[c] ?? fallback;
       cells.push({ r, c, value: val });
     }
   }
@@ -387,6 +474,24 @@ const flatGridCells = computed(() => {
 
 // Global numeric range for linear scales across all frames/keyframes
 const globalNumericBounds = computed(() => {
+  if (props.variable.variableType === 'movement') {
+    let min = Infinity;
+    let max = -Infinity;
+    if (Array.isArray(props.variable.data)) {
+      for (const row of props.variable.data) {
+        if (!Array.isArray(row)) continue;
+        for (const cell of row) {
+          const s = movementSum(cell);
+          if (s < min) min = s;
+          if (s > max) max = s;
+        }
+      }
+    }
+    if (min === Infinity) min = 0;
+    if (max === -Infinity) max = 0.08; // 8 directions * 0.01 default
+    return { min, max };
+  }
+
   if (props.variable.variableType !== 'numeric') {
     return { min: 0, max: 100 };
   }
@@ -472,6 +577,9 @@ function getCellValue(r: number, c: number): any {
 }
 
 function formatCellValue(val: any): string {
+  if (props.variable.variableType === 'movement') {
+    return movementSum(val).toFixed(2);
+  }
   if (typeof val === 'number') {
     return Number.isInteger(val) ? val.toString() : val.toFixed(1);
   }
@@ -484,6 +592,14 @@ function getCellColor(value: any): string {
       String(value),
       props.variable.categories || [],
       selectedPalette.value
+    );
+  }
+  if (props.variable.variableType === 'movement') {
+    return getNumericColor(
+      movementSum(value),
+      numericMin.value,
+      numericMax.value,
+      selectedColormap.value
     );
   }
   const num = typeof value === 'number' ? value : parseFloat(value) || 0;
@@ -500,14 +616,20 @@ const getLinearGradientCss = computed(() => {
 
 // Dispersion calculation
 function isCellInDispersion(r: number, c: number): boolean {
+  if (isMovement.value) return false;
   if (!hoverCell.value || dispersionRadius.value <= 0 || !isEditingEnabled.value) return false;
   const dist = Math.max(Math.abs(r - hoverCell.value.r), Math.abs(c - hoverCell.value.c));
   return dist <= dispersionRadius.value;
 }
 
-function handleCellClick(targetR: number, targetC: number) {
+function handleCellClick(targetR: number, targetC: number, event?: MouseEvent) {
   if (didDrag) return;
   if (!isEditingEnabled.value) return;
+
+  if (isMovement.value) {
+    openMovementEditor(targetR, targetC, event);
+    return;
+  }
 
   const isCategorical = props.variable.variableType === 'categorical';
   const radius = dispersionRadius.value;
@@ -536,6 +658,62 @@ function handleCellClick(targetR: number, targetC: number) {
     }
   }
 
+  emit('variableUpdated', props.variable);
+}
+
+// Movement editors
+const editorSum = computed(() => {
+  const ed = movementEditor.value;
+  return ed ? movementSum(ed.rates) : 0;
+});
+
+const popoverStyle = computed(() => {
+  const ed = movementEditor.value;
+  if (!ed) return {};
+  const width = 260;
+  const height = 240;
+  const pad = 12;
+  let left = ed.x + 10;
+  let top = ed.y + 10;
+  if (left + width > window.innerWidth) left = Math.max(pad, ed.x - width - 10);
+  if (top + height > window.innerHeight) top = Math.max(pad, ed.y - height - 10);
+  return { left: `${left}px`, top: `${top}px` };
+});
+
+function openMovementEditor(targetR: number, targetC: number, event?: MouseEvent) {
+  const grid = activeGrid.value;
+  const current = grid[targetR]?.[targetC];
+  const rates: MovementRates = createDefaultMovementRates(0);
+  for (const dir of MOVEMENT_DIRECTIONS) {
+    const v = Number(current?.[dir]);
+    rates[dir] = isNaN(v) ? 0.01 : v;
+  }
+  movementEditor.value = {
+    r: targetR,
+    c: targetC,
+    x: event?.clientX ?? window.innerWidth / 2,
+    y: event?.clientY ?? window.innerHeight / 2,
+    rates,
+  };
+}
+
+function resetMovementEditor() {
+  const ed = movementEditor.value;
+  if (!ed) return;
+  ed.rates = createDefaultMovementRates(0.01);
+}
+
+function applyMovementEdit() {
+  const ed = movementEditor.value;
+  if (!ed) return;
+  const cleaned: MovementRates = createDefaultMovementRates(0);
+  for (const dir of MOVEMENT_DIRECTIONS) {
+    const n = Number(ed.rates[dir]);
+    cleaned[dir] = Math.max(0, Math.min(1, isNaN(n) ? 0 : n));
+  }
+  const grid = activeGrid.value;
+  if (grid[ed.r]) grid[ed.r][ed.c] = cleaned;
+  movementEditor.value = null;
   emit('variableUpdated', props.variable);
 }
 
@@ -1117,5 +1295,115 @@ onUnmounted(() => {
 
 .btn-danger:hover {
   background: #b91c1c;
+}
+
+.btn-primary {
+  background: #0284c7;
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: #0369a1;
+}
+
+.movement-hint .cube-inspect-badge {
+  background: #1e3a8a;
+  color: #93c5fd;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+
+/* Movement cell editor popover */
+.movement-popover-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 800;
+}
+
+.movement-popover {
+  position: fixed;
+  width: 260px;
+  background: #111e38;
+  border: 1px solid #334155;
+  border-radius: 8px;
+  padding: 0.65rem;
+  box-shadow: 0 12px 30px -8px rgba(0, 0, 0, 0.7);
+  color: #f1f5f9;
+}
+
+.mp-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #38bdf8;
+  margin-bottom: 0.5rem;
+}
+
+.mp-close {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 0.2rem;
+}
+
+.mp-close:hover {
+  color: #f87171;
+}
+
+.movement-compass {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+}
+
+.mc-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.mc-dir {
+  font-size: 0.65rem;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.mc-cell input {
+  width: 100%;
+  box-sizing: border-box;
+  background: #0f172a;
+  border: 1px solid #334155;
+  color: #f8fafc;
+  padding: 0.2rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  text-align: center;
+}
+
+.mc-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #0f172a;
+  border: 1px solid #334155;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #38bdf8;
+}
+
+.mp-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  margin-top: 0.65rem;
 }
 </style>
