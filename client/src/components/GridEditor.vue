@@ -411,7 +411,7 @@ watch(
 
 // View scales
 const selectedPalette = ref('nature');
-const selectedColormap = ref('viridis');
+const selectedColormap = ref('grayscale');
 const showCellValues = ref(false);
 
 // Tile Tools
