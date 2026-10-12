@@ -2,6 +2,16 @@ import type { World } from '../types/world';
 
 const BASE_URL = '/api';
 
+export interface SimulationResult {
+  grid: { width: number; height: number };
+  dt: number;
+  steps: number;
+  movement_mode: string;
+  times: number[];
+  // states[stateName][timeIndex][row][col]
+  states: Record<string, number[][][]>;
+}
+
 export async function fetchWorldNames(): Promise<string[]> {
   const res = await fetch(`${BASE_URL}/worlds`);
   if (!res.ok) {
@@ -30,6 +40,26 @@ export async function saveWorld(world: World): Promise<{ success: boolean; messa
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
     throw new Error(errorData.error || `Failed to save world "${world.name}"`);
+  }
+
+  return res.json();
+}
+
+export async function simulateWorld(
+  name: string,
+  steps: number
+): Promise<SimulationResult> {
+  const res = await fetch(`${BASE_URL}/worlds/${encodeURIComponent(name)}/simulate`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ steps }),
+  });
+
+  if (!res.ok) {
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || `Failed to simulate world "${name}"`);
   }
 
   return res.json();

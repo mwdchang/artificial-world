@@ -4,7 +4,7 @@
     <TopBar
       :world="world"
       :currentTab="currentTab"
-      @update:currentTab="currentTab = $event"
+      @update:currentTab="handleTabChange"
       @update:world="handleWorldLoaded"
       @createNewWorld="handleCreateNewWorld"
     />
@@ -43,7 +43,7 @@
       </template>
 
       <!-- Simulate Tab -->
-      <SimulateTab v-else />
+      <SimulateTab v-else :world="world" />
     </div>
   </div>
 </template>
@@ -52,6 +52,7 @@
 import { ref, computed } from 'vue';
 import type { World, Variable } from './types/world';
 import { createDefaultWorld } from './types/world';
+import { saveWorld } from './api/worldApi';
 import TopBar from './components/TopBar.vue';
 import ModelTab from './components/ModelTab.vue';
 import VariableList from './components/VariableList.vue';
@@ -72,6 +73,19 @@ const selectedVariable = computed<Variable | null>(() => {
   }
   return world.value.variables[0] || null;
 });
+
+async function handleTabChange(tab: 'model' | 'build' | 'simulate') {
+  // Before entering the Simulate tab, persist the world we are working on
+  // so the server simulates the latest state.
+  if (tab === 'simulate') {
+    try {
+      await saveWorld(world.value);
+    } catch (err) {
+      console.error('Failed to save world before simulating:', err);
+    }
+  }
+  currentTab.value = tab;
+}
 
 function handleCreateNewWorld(payload: { name: string; width: number; height: number }) {
   world.value = createDefaultWorld(payload.name, payload.width, payload.height);
