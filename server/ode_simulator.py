@@ -15,7 +15,8 @@ World mapping:
 Usage:
   python ode_simulator.py worlds/Test123.json
   python ode_simulator.py worlds/Test123.json --steps 200 --dt 0.05 \
-      --movement-mode continuous --wrap --output result.json
+      --movement-mode continuous --solver rk45 \
+      --wrap --output result.json
 """
 
 import argparse
@@ -219,6 +220,12 @@ def parse_args(argv=None):
         default="discrete",
     )
     parser.add_argument(
+        "--solver",
+        choices=["euler", "rk4", "rk45"],
+        default="rk4",
+        help="ODE integrator (default: rk4)",
+    )
+    parser.add_argument(
         "--wrap",
         action="store_true",
         help="Wrap movement across grid edges (default: blocked)",
@@ -265,6 +272,7 @@ def main(argv=None):
             dt=args.dt,
             movement=movement,
             movement_mode=args.movement_mode,
+            solver=args.solver,
         )
     except ValueError as err:
         raise SystemExit(f"error: {err}")
@@ -277,7 +285,7 @@ def main(argv=None):
     print(f"States:          {', '.join(model['states'])}")
     print(f"Parameters:      {', '.join(model['parameters']) or '(none)'}")
     print(f"Movement:        {'yes' if movement is not None else 'none'}")
-    print(f"Steps:           {args.steps} (dt={args.dt}, mode={args.movement_mode})")
+    print(f"Steps:           {args.steps} (dt={args.dt}, mode={args.movement_mode}, solver={args.solver})")
     print(f"Initial total:   {total_population(result, 0):.6g}")
     print(f"Final total:     {total_population(result, -1):.6g}")
     print(f"Results written: {output_path}")

@@ -1,0 +1,142 @@
+{
+  "name": "PP",
+  "width": 1,
+  "height": 1,
+  "variables": [
+    {
+      "name": "land",
+      "gridType": "static",
+      "variableType": "categorical",
+      "categories": [
+        "plain",
+        "forest",
+        "water",
+        "mountain"
+      ],
+      "keyframes": null,
+      "data": [
+        [
+          "plain"
+        ]
+      ]
+    },
+    {
+      "name": "preyGrowthRate",
+      "gridType": "static",
+      "variableType": "numeric",
+      "categories": null,
+      "keyframes": null,
+      "data": [
+        [
+          0.1
+        ]
+      ]
+    },
+    {
+      "name": "predationRate",
+      "gridType": "static",
+      "variableType": "numeric",
+      "categories": null,
+      "keyframes": null,
+      "data": [
+        [
+          0.01
+        ]
+      ]
+    },
+    {
+      "name": "predatorDeathRate",
+      "gridType": "static",
+      "variableType": "numeric",
+      "categories": null,
+      "keyframes": null,
+      "data": [
+        [
+          0.2
+        ]
+      ]
+    },
+    {
+      "name": "predatorReproductionRate",
+      "gridType": "static",
+      "variableType": "numeric",
+      "categories": null,
+      "keyframes": null,
+      "data": [
+        [
+          0.005
+        ]
+      ]
+    },
+    {
+      "name": "Prey",
+      "gridType": "static",
+      "variableType": "numeric",
+      "categories": null,
+      "keyframes": null,
+      "data": [
+        [
+          20
+        ]
+      ]
+    },
+    {
+      "name": "Predators",
+      "gridType": "static",
+      "variableType": "numeric",
+      "categories": null,
+      "keyframes": null,
+      "data": [
+        [
+          10
+        ]
+      ]
+    },
+    {
+      "name": "Predators_dispersal",
+      "gridType": "static",
+      "variableType": "movement",
+      "categories": null,
+      "keyframes": null,
+      "data": [
+        [
+          {
+            "n": 0,
+            "s": 0,
+            "e": 0,
+            "w": 0,
+            "ne": 0,
+            "nw": 0,
+            "se": 0,
+            "sw": 0
+          }
+        ]
+      ]
+    },
+    {
+      "name": "Prey_dispersal",
+      "gridType": "static",
+      "variableType": "movement",
+      "categories": null,
+      "keyframes": null,
+      "data": [
+        [
+          {
+            "n": 0,
+            "s": 0,
+            "e": 0,
+            "w": 0,
+            "ne": 0,
+            "nw": 0,
+            "se": 0,
+            "sw": 0
+          }
+        ]
+      ]
+    }
+  ],
+  "equations": [
+    "dPrey/dt = preyGrowthRate * Prey - predationRate * Prey * Predators",
+    "dPredators/dt = predatorReproductionRate * Prey * Predators - predatorDeathRate * Predators"
+  ]
+}

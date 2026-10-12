@@ -349,6 +349,9 @@ def movement_delta(y, model, movement, rates):
 # 4. Simulation
 # ============================================================
 
+SOLVERS = ("euler", "rk4", "rk45")
+
+
 def simulate(
     model,
     initial_conditions,
@@ -357,14 +360,19 @@ def simulate(
     dt=0.1,
     movement=None,
     movement_mode="continuous",
+    solver="rk4",
 ):
     """
     movement_mode:
       "continuous": movement rates are per unit time and are included
-                    in the ODE integrated by RK4.
+                    in the ODE integrated by the chosen solver.
       "discrete":   first integrate local ODEs over dt, then move the
                     specified fraction of each cell's population.
                     Rates are fractions per step in this mode.
+
+    solver: one of "euler", "rk4" or "rk45" (Dormand-Prince). Each
+            advances the state by a fixed step dt; they trade accuracy
+            for cost ("euler" < "rk4" < "rk45" evaluations per step).
 
     State layout throughout is a single array y of shape
     (height, width, number_of_states). Local reaction and grid movement
@@ -377,6 +385,8 @@ def simulate(
         raise ValueError(
             "movement_mode must be 'continuous' or 'discrete'"
         )
+    if solver not in SOLVERS:
+        raise ValueError(f"solver must be one of {SOLVERS}")
 
     missing = set(model["parameters"]) - set(parameters)
     if missing:
@@ -442,19 +452,58 @@ def simulate(
             dy = dy + movement_delta(y, model, movement, rates)
         return dy
 
-    # Classic 4th-order Runge-Kutta over a single fixed step dt. Both
-    # `full_rhs` calls and the arithmetic are pure array ops, which is
-    # what lets JAX trace and compile this.
-    def rk4_local(y):
+    # Fixed-step integrators. Each is pure array arithmetic over
+    # `full_rhs`, which is what lets JAX trace and compile them.
+
+    # Forward Euler: one evaluation, first-order accurate.
+    def euler_step(y):
+        return y + dt * full_rhs(y)
+
+    # Classic 4th-order Runge-Kutta.
+    def rk4_step(y):
         k1 = full_rhs(y)
         k2 = full_rhs(y + (dt / 2) * k1)
         k3 = full_rhs(y + (dt / 2) * k2)
         k4 = full_rhs(y + dt * k3)
         return y + (dt / 6) * (k1 + 2*k2 + 2*k3 + k4)
 
+    # Dormand-Prince 5(4) - the 5th-order solution of the embedded RK45
+    # pair. Six evaluations per step give 5th-order accuracy (the extra
+    # stage needed only for the embedded error estimate is omitted since
+    # the output is sampled on a fixed grid).
+    def rk45_step(y):
+        k1 = full_rhs(y)
+        k2 = full_rhs(y + dt * (1/5) * k1)
+        k3 = full_rhs(y + dt * (3/40 * k1 + 9/40 * k2))
+        k4 = full_rhs(
+            y + dt * (44/45 * k1 - 56/15 * k2 + 32/9 * k3)
+        )
+        k5 = full_rhs(
+            y + dt * (
+                19372/6561 * k1 - 25360/2187 * k2
+                + 64448/6561 * k3 - 212/729 * k4
+            )
+        )
+        k6 = full_rhs(
+            y + dt * (
+                9017/3168 * k1 - 355/33 * k2 + 46732/5247 * k3
+                + 49/176 * k4 - 5103/18656 * k5
+            )
+        )
+        return y + dt * (
+            35/384 * k1 + 500/1113 * k3 + 125/192 * k4
+            - 2187/6784 * k5 + 11/84 * k6
+        )
+
+    step_local = {
+        "euler": euler_step,
+        "rk4": rk4_step,
+        "rk45": rk45_step,
+    }[solver]
+
     def advance(y, _):
         # Always integrate local ODEs first.
-        y_next = rk4_local(y)
+        y_next = step_local(y)
 
         # Discrete movement happens after the local ODE step.
         if movement is not None and movement_mode == "discrete":
@@ -485,6 +534,7 @@ def simulate(
         "dt": dt,
         "steps": steps,
         "movement_mode": movement_mode,
+        "solver": solver,
         "times": (jnp.arange(steps + 1) * dt).tolist(),
         "states": {
             state: trajectory[..., i].tolist()

@@ -20,7 +20,12 @@
           class="number-input"
         />
 
-
+        <label class="control-label" for="solverInput">Solver</label>
+        <select id="solverInput" v-model="solverInput" class="select-input">
+          <option v-for="name in SOLVERS" :key="name" :value="name">
+            {{ name }}
+          </option>
+        </select>
       </div>
 
       <button class="btn btn-primary" :disabled="running" @click="runSimulation">
@@ -204,6 +209,8 @@ const props = defineProps<{
 
 const STATE_COLORS = ['#38bdf8', '#f472b6', '#4ade80', '#facc15', '#c084fc', '#fb923c'];
 
+const SOLVERS = ['rk4', 'euler', 'rk45'];
+
 // Controls
 const stepsInput = ref(50);
 const sizeInput = ref(0.1);
@@ -213,6 +220,7 @@ const result = ref<SimulationResult | null>(null);
 const selectedState = ref('');
 const selectedColormap = ref('grayscale');
 const globalScale = ref(true);
+const solverInput = ref('rk4');
 
 // Playback
 const currentStep = ref(0);
@@ -377,7 +385,7 @@ async function runSimulation() {
   running.value = true;
   pausePlayback();
   try {
-    const res = await simulateWorld(props.world.name, stepsInput.value, sizeInput.value);
+    const res = await simulateWorld(props.world.name, stepsInput.value, sizeInput.value, solverInput.value);
     result.value = res;
     selectedState.value = Object.keys(res.states)[0] || '';
     currentStep.value = 0;

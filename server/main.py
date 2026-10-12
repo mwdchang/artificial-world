@@ -41,9 +41,7 @@ def ensure_simulations_dir():
         print(f"Failed to create simulations directory: {err}")
 
 
-# def run_simulation(world_path, steps, dt=0.1, movement_mode="discrete", wrap=False):
-# def run_simulation(world_path, steps, dt=0.1, movement_mode="continuous", wrap=False):
-def run_simulation(world_path, steps, dt=0.1, movement_mode="discrete", wrap=False):
+def run_simulation(world_path, steps, dt=0.1, movement_mode="continuous", wrap=False, solver="rk4"):
     """Run the ODE simulator for a world file, writing and returning the result."""
     # Imported lazily so world CRUD stays fast and does not require jax.
     import ode_simulator
@@ -65,6 +63,7 @@ def run_simulation(world_path, steps, dt=0.1, movement_mode="discrete", wrap=Fal
         dt=dt,
         movement=movement,
         movement_mode=movement_mode,
+        solver=solver,
     )
 
     world_name = world.get("name") or world_path.stem
@@ -161,13 +160,19 @@ async def simulate_world(world: str, request: Request):
         parsed = json.loads(body) if body else {}
         steps = int(parsed.get("steps", 50))
         stepSize = float(parsed.get('stepSize', 0.1))
+        solver = parsed.get("solver", "rk4")
+        if solver not in ("euler", "rk4", "rk45"):
+            return JSONResponse(
+                {"error": "Invalid solver. Must be one of: euler, rk4, rk45"},
+                status_code=400,
+            )
     except Exception as err:
         return JSONResponse(
             {"error": "Invalid JSON body", "details": str(err)}, status_code=400
         )
 
     try:
-        result = run_simulation(file_path, steps, stepSize)
+        result = run_simulation(file_path, steps, stepSize, solver=solver)
     except ValueError as err:
         return JSONResponse({"error": str(err)}, status_code=400)
     except Exception as err:

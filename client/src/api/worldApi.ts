@@ -48,14 +48,15 @@ export async function saveWorld(world: World): Promise<{ success: boolean; messa
 export async function simulateWorld(
   name: string,
   steps: number,
-  stepSize: number
+  stepSize: number,
+  solver: string
 ): Promise<SimulationResult> {
   const res = await fetch(`${BASE_URL}/worlds/${encodeURIComponent(name)}/simulate`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ steps, stepSize }),
+    body: JSON.stringify({ steps, stepSize, solver }),
   });
 
   if (!res.ok) {
