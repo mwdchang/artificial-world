@@ -36,6 +36,9 @@ npm run dev
 Goto http://localhost:5173
 
 
+![UI](aw-example.jpg)
+
+
 ## ODE Scripts
 The underlying script is **server/ode_simulator.py**, this creates a \<WorldName\>_simluation.json
 ```
