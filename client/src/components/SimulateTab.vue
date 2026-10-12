@@ -23,10 +23,8 @@
 
     <!-- Empty state -->
     <div v-if="!result" class="empty-state">
-      <div class="icon">🔬</div>
-      <h2>Run a Simulation</h2>
+      <h2>Run Simulation</h2>
       <p>
-        The current world is saved, then its ODEs are advanced on the server.
         Set the number of steps and press <strong>Run Simulation</strong>.
       </p>
     </div>
@@ -433,11 +431,6 @@ onUnmounted(() => {
   text-align: center;
   padding: 2rem;
   color: #94a3b8;
-}
-
-.empty-state .icon {
-  font-size: 3rem;
-  margin-bottom: 1rem;
 }
 
 .empty-state h2 {
