@@ -41,6 +41,8 @@ def ensure_simulations_dir():
         print(f"Failed to create simulations directory: {err}")
 
 
+# def run_simulation(world_path, steps, dt=0.1, movement_mode="discrete", wrap=False):
+# def run_simulation(world_path, steps, dt=0.1, movement_mode="continuous", wrap=False):
 def run_simulation(world_path, steps, dt=0.1, movement_mode="discrete", wrap=False):
     """Run the ODE simulator for a world file, writing and returning the result."""
     # Imported lazily so world CRUD stays fast and does not require jax.
@@ -158,13 +160,14 @@ async def simulate_world(world: str, request: Request):
         body = await request.body()
         parsed = json.loads(body) if body else {}
         steps = int(parsed.get("steps", 50))
+        stepSize = float(parsed.get('stepSize', 0.1))
     except Exception as err:
         return JSONResponse(
             {"error": "Invalid JSON body", "details": str(err)}, status_code=400
         )
 
     try:
-        result = run_simulation(file_path, steps)
+        result = run_simulation(file_path, steps, stepSize)
     except ValueError as err:
         return JSONResponse({"error": str(err)}, status_code=400)
     except Exception as err:

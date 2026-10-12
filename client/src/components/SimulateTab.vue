@@ -11,6 +11,16 @@
           min="1"
           class="number-input"
         />
+        <label class="control-label" for="sizeInput">Step size:</label>
+        <input
+          id="sizeInput"
+          v-model.number="sizeInput"
+          type="number"
+          min="0.1"
+          class="number-input"
+        />
+
+
       </div>
 
       <button class="btn btn-primary" :disabled="running" @click="runSimulation">
@@ -21,16 +31,24 @@
       <div v-if="error" class="error-msg">{{ error }}</div>
     </div>
 
+    <!-- Running -->
+    <div v-if="running" class="empty-state">
+      <p>
+      Running with steps={{stepsInput}} and stepSize={{sizeInput}}
+      </p>
+    </div>
+
+
     <!-- Empty state -->
-    <div v-if="!result" class="empty-state">
+    <div v-if="!result && !running" class="empty-state">
       <h2>Run Simulation</h2>
       <p>
-        Set the number of steps and press <strong>Run Simulation</strong>.
+        Set the number of steps and step size, then click <strong>Run Simulation</strong>.
       </p>
     </div>
 
     <!-- Result view -->
-    <div v-else class="result-view">
+    <div v-if="result && !running" class="result-view">
       <!-- State selector + legend -->
       <div class="state-toolbar">
         <div class="control-section">
@@ -40,11 +58,28 @@
               {{ name }}
             </option>
           </select>
+          &nbsp;
+          &nbsp;
+          &nbsp;
+          <label class="control-label" for="colormapSelect">Color:</label>
+          <select id="colormapSelect" v-model="selectedColormap" class="select-input">
+            <option v-for="cmap in LINEAR_COLORMAPS" :key="cmap.id" :value="cmap.id">
+              {{ cmap.name }}
+            </option>
+          </select>
+          &nbsp;
+          &nbsp;
+          &nbsp;
+          <label class="toggle-label">
+            <input v-model="globalScale" type="checkbox" />
+            Global
+          </label>
         </div>
+
 
         <div class="time-readout">
           Timestep: <strong>{{ currentStep }}</strong> / {{ totalSteps - 1 }}
-          <span class="time-value">(t = {{ currentTime }})</span>
+          <span class="time-value">(t = {{ currentTime.toFixed(2) }})</span>
         </div>
       </div>
 
@@ -158,10 +193,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onUnmounted } from 'vue';
+import { ref, computed, onUnmounted, watch } from 'vue';
 import type { World } from '../types/world';
 import { simulateWorld, type SimulationResult } from '../api/worldApi';
-import { getNumericColor } from '../utils/colorScales';
+import { getNumericColor, LINEAR_COLORMAPS } from '../utils/colorScales';
 
 const props = defineProps<{
   world: World;
@@ -171,10 +206,13 @@ const STATE_COLORS = ['#38bdf8', '#f472b6', '#4ade80', '#facc15', '#c084fc', '#f
 
 // Controls
 const stepsInput = ref(50);
+const sizeInput = ref(0.1);
 const running = ref(false);
 const error = ref('');
 const result = ref<SimulationResult | null>(null);
 const selectedState = ref('');
+const selectedColormap = ref('grayscale');
+const globalScale = ref(true);
 
 // Playback
 const currentStep = ref(0);
@@ -195,7 +233,7 @@ const currentTime = computed(() => {
   return result.value.times[currentStep.value] ?? 0;
 });
 
-// Min/max across the selected state over the whole run (for stable colors)
+// Min/max for the selected state - global or per step
 const stateBounds = computed(() => {
   const res = result.value;
   const name = selectedState.value;
@@ -203,11 +241,23 @@ const stateBounds = computed(() => {
 
   let min = Infinity;
   let max = -Infinity;
-  for (const frame of res.states[name]) {
-    for (const row of frame) {
-      for (const value of row) {
-        if (value < min) min = value;
-        if (value > max) max = value;
+  if (globalScale.value) {
+    for (const frame of res.states[name]) {
+      for (const row of frame) {
+        for (const value of row) {
+          if (value < min) min = value;
+          if (value > max) max = value;
+        }
+      }
+    }
+  } else {
+    const frame = res.states[name][currentStep.value];
+    if (frame) {
+      for (const row of frame) {
+        for (const value of row) {
+          if (value < min) min = value;
+          if (value > max) max = value;
+        }
       }
     }
   }
@@ -307,7 +357,7 @@ const popupStyle = computed(() => {
 });
 
 function cellColor(value: number): string {
-  return getNumericColor(value, stateBounds.value.min, stateBounds.value.max, 'viridis');
+  return getNumericColor(value, stateBounds.value.min, stateBounds.value.max, selectedColormap.value);
 }
 
 function formatValue(value: number): string {
@@ -327,7 +377,7 @@ async function runSimulation() {
   running.value = true;
   pausePlayback();
   try {
-    const res = await simulateWorld(props.world.name, stepsInput.value);
+    const res = await simulateWorld(props.world.name, stepsInput.value, sizeInput.value);
     result.value = res;
     selectedState.value = Object.keys(res.states)[0] || '';
     currentStep.value = 0;
@@ -366,6 +416,16 @@ function pausePlayback() {
 onUnmounted(() => {
   pausePlayback();
 });
+
+
+watch(
+  () => props.world.name,
+  () => {
+    result.value = null;
+  }
+)
+
+
 </script>
 
 <style scoped>
@@ -395,7 +455,7 @@ onUnmounted(() => {
 
 .control-label {
   color: #94a3b8;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 
 .number-input,
@@ -405,11 +465,20 @@ onUnmounted(() => {
   color: #f8fafc;
   padding: 0.3rem 0.6rem;
   border-radius: 4px;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 
 .number-input {
   width: 90px;
+}
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #94a3b8;
+  font-size: 0.8rem;
+  cursor: pointer;
 }
 
 .error-msg {
@@ -463,7 +532,7 @@ onUnmounted(() => {
 }
 
 .time-readout {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: #cbd5e1;
 }
 
@@ -619,9 +688,9 @@ onUnmounted(() => {
 }
 
 .btn {
-  padding: 0.35rem 0.85rem;
+  padding: 0.35rem 0.8rem;
   border-radius: 5px;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 500;
   cursor: pointer;
   border: none;

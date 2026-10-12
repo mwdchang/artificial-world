@@ -1049,33 +1049,6 @@ onUnmounted(() => {
   color: #38bdf8;
 }
 
-.badge {
-  font-size: 0.7rem;
-  padding: 0.2rem 0.5rem;
-  border-radius: 4px;
-  font-weight: 500;
-}
-
-.badge.static {
-  background: #555;
-  color: #eee;
-}
-
-.badge.timeVarying {
-  background: #555;
-  color: #eee;
-}
-
-.badge.numeric {
-  background: #555;
-  color: #eee;
-}
-
-.badge.categorical {
-  background: #555;
-  color: #eee;
-}
-
 .time-varying-actions {
   display: flex;
   align-items: center;
@@ -1114,7 +1087,7 @@ onUnmounted(() => {
   border-radius: 5px;
   border: none;
   cursor: pointer;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   transition: background 0.15s ease;
 }
 
@@ -1130,7 +1103,7 @@ onUnmounted(() => {
   padding: 0.65rem 1.25rem;
   background: #0f172a;
   border-bottom: 1px solid #1e293b;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 
 .tool-section {
@@ -1151,7 +1124,7 @@ onUnmounted(() => {
   color: #f8fafc;
   padding: 0.2rem 0.8rem;
   border-radius: 4px;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 
 .number-input {
@@ -1238,7 +1211,7 @@ onUnmounted(() => {
 }
 
 .time-label {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: #cbd5e1;
 }
 
@@ -1249,7 +1222,7 @@ onUnmounted(() => {
 }
 
 .kf-label {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: #94a3b8;
   font-weight: 500;
 }
@@ -1489,7 +1462,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-weight: 600;
   color: #38bdf8;
   margin-bottom: 0.5rem;

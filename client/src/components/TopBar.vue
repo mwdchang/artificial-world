@@ -37,12 +37,15 @@
           placeholder="World name"
           @change="updateWorldName"
         />
+
+        <div class="summary-item dimensions-badge">
+          <span>{{ world.width }} &times; {{ world.height }}</span>
+        </div>
       </div>
 
-      <div class="summary-item dimensions-badge">
-        <span class="dim-label">Size:</span>
-        <span class="dim-val">{{ world.width }} &times; {{ world.height }}</span>
-      </div>
+      &nbsp;
+      &nbsp;
+      &nbsp;
 
       <div class="actions">
         <button class="btn btn-secondary" @click="showNewModal = true">
@@ -79,11 +82,11 @@
         <div class="form-row">
           <div class="form-group">
             <label>Width</label>
-            <input v-model.number="newWorldWidth" type="number" min="3" max="50" />
+            <input v-model.number="newWorldWidth" type="number" min="1" max="50" />
           </div>
           <div class="form-group">
             <label>Height</label>
-            <input v-model.number="newWorldHeight" type="number" min="3" max="50" />
+            <input v-model.number="newWorldHeight" type="number" min="1" max="50" />
           </div>
         </div>
 
@@ -97,7 +100,7 @@
     <!-- Load World Modal -->
     <div v-if="showLoadModal" class="modal-backdrop" @click.self="showLoadModal = false">
       <div class="modal-card">
-        <h3>Load Existing World</h3>
+        <h3>Load World</h3>
         <p class="modal-hint">Select a saved world from the server repository:</p>
 
         <div v-if="loadingList" class="loading-state">Fetching saved worlds...</div>
@@ -162,8 +165,8 @@ const newWorldHeight = ref(10);
 
 function confirmNewWorld() {
   const name = newWorldName.value.trim() || 'New World';
-  const width = Math.max(3, Math.min(50, newWorldWidth.value || 10));
-  const height = Math.max(3, Math.min(50, newWorldHeight.value || 10));
+  const width = Math.max(1, Math.min(50, newWorldWidth.value || 10));
+  const height = Math.max(1, Math.min(50, newWorldHeight.value || 10));
   emit('createNewWorld', { name, width, height });
   showNewModal.value = false;
 }
@@ -235,7 +238,7 @@ async function handleSave() {
   padding-bottom: 0.2rem;
   padding-left: 1rem;
   padding-right: 1rem;
-  border-bottom: 1px solid #ccccee;
+  border-bottom: 1px solid #38bdf8;
   position: relative;
   gap: 1rem;
 }
@@ -313,19 +316,11 @@ async function handleSave() {
 }
 
 .dimensions-badge {
-  background: #0f172a;
-  padding: 0.3rem 0.6rem;
-  border-radius: 4px;
+  padding: 0.15rem 0.4rem;
+  border-radius: 3px;
   border: 1px solid #334155;
-}
-
-.dim-label {
-  color: #94a3b8;
-  margin-right: 0.25rem;
-}
-
-.dim-val {
-  color: #e2e8f0;
+  background: #555;
+  color: #eee;
 }
 
 .actions {
@@ -336,7 +331,7 @@ async function handleSave() {
 .btn {
   padding: 0.2rem 0.8rem;
   border-radius: 5px;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   cursor: pointer;
   border: none;
   transition: background 0.15s ease;
@@ -377,7 +372,7 @@ async function handleSave() {
   margin-top: 0.5rem;
   padding: 0.5rem 1rem;
   border-radius: 6px;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
   z-index: 1000;
 }

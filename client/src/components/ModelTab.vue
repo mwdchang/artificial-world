@@ -143,7 +143,7 @@ function removeEquation(idx: number) {
   color: #e2e8f0;
   padding: 0.5rem 0.7rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 
 .equation-input:focus {

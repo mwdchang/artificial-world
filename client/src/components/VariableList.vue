@@ -27,10 +27,10 @@
         </div>
 
         <div class="var-badges">
-          <span class="badge" :class="v.gridType">
+          <span class="badge"> 
             {{ v.gridType === 'static' ? 'Static' : 'Time-Varying' }}
           </span>
-          <span class="badge" :class="v.variableType">
+          <span class="badge">
             {{
               v.variableType === 'numeric'
                 ? 'Numeric'
@@ -304,7 +304,7 @@ function confirmDelete(idx: number) {
 
 <style scoped>
 .variable-list-pane {
-  width: 270px;
+  width: 260px;
   background: #111827;
   border-right: 1px solid #1f2937;
   display: flex;
@@ -332,7 +332,7 @@ function confirmDelete(idx: number) {
 .var-list {
   flex: 1;
   overflow-y: auto;
-  padding: 0.75rem;
+  padding: 0.65rem;
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
@@ -342,7 +342,7 @@ function confirmDelete(idx: number) {
   background: #1f2937;
   border: 1px solid #374151;
   border-radius: 6px;
-  padding: 0.75rem;
+  padding: 0.65rem;
   cursor: pointer;
   transition: all 0.15s ease;
 }
@@ -397,30 +397,6 @@ function confirmDelete(idx: number) {
   font-size: 0.7rem;
   padding: 0.15rem 0.4rem;
   border-radius: 3px;
-  font-weight: 500;
-}
-
-.badge.static {
-  background: #555;
-  color: #eee;
-}
-
-.badge.timeVarying {
-  background: #555;
-  color: #eee;
-}
-
-.badge.numeric {
-  background: #555;
-  color: #eee;
-}
-
-.badge.categorical {
-  background: #555;
-  color: #eee;
-}
-
-.badge.movement {
   background: #555;
   color: #eee;
 }
@@ -535,7 +511,7 @@ function confirmDelete(idx: number) {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   cursor: pointer;
 }
 

@@ -15,7 +15,7 @@ export interface LinearColorMap {
 export const CATEGORICAL_PALETTES: CategoricalPalette[] = [
   {
     id: 'nature',
-    name: 'Nature (Default)',
+    name: 'Nature',
     namedDefaults: {
       plain: '#86efac',
       forest: '#15803d',
