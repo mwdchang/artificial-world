@@ -76,7 +76,7 @@
       <!-- Dispersion Slider (0 to 5) -->
       <div v-if="isEditingEnabled && !isMovement" class="tool-section dispersion-control">
         <label for="dispersionSlider" class="tool-label" :title="dispersionTooltip">
-          Disperse: <strong class="dispersion-value">{{ dispersionRadius }}</strong>
+          Brush: <strong class="dispersion-value">{{ dispersionRadius }}</strong>
         </label>
         <input
           id="dispersionSlider"

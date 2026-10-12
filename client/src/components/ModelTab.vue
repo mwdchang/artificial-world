@@ -108,7 +108,7 @@ function removeEquation(idx: number) {
 .model-body {
   flex: 1;
   overflow-y: auto;
-  padding: 1.25rem;
+  padding: 1.25rem 4rem;
 }
 
 .model-hint {

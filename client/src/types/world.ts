@@ -85,17 +85,18 @@ export function createDefaultWorld(name = 'New World', width = 10, height = 10):
     data: landData,
   };
 
-  // 2. temperature (timeVarying, numeric, steps [0, 20], default 17)
+  // 2. temperature (timeVarying, numeric, steps [0, 20], default 15)
+  const defaultTemp = 15;
   const tempGridStep0: number[][] = Array.from({ length: height }, () =>
-    Array.from({ length: width }, () => 17)
+    Array.from({ length: width }, () => defaultTemp)
   );
   const tempGridStep20: number[][] = Array.from({ length: height }, () =>
-    Array.from({ length: width }, () => 17)
+    Array.from({ length: width }, () => defaultTemp)
   );
 
   // Generate initial data cube for steps 0 to 20 (21 steps)
   const tempCube: number[][][] = Array.from({ length: 21 }, () =>
-    Array.from({ length: height }, () => Array.from({ length: width }, () => 17))
+    Array.from({ length: height }, () => Array.from({ length: width }, () => defaultTemp))
   );
 
   const temperatureVariable: Variable = {
