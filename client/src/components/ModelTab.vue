@@ -1,19 +1,12 @@
 <template>
   <main class="model-tab-main">
     <div class="editor-header">
-      <div class="var-info">
-        <h2 class="active-var-name">Model Equations</h2>
-        <span class="count-badge">
-          {{ world.equations.length }} equation{{ world.equations.length === 1 ? '' : 's' }}
-        </span>
-      </div>
       <button class="btn btn-primary" @click="addEquation">+ Add Equation</button>
     </div>
 
     <div class="model-body">
       <p class="model-hint">
-        Enter ODE equations of the form <code>dState/dt = expression</code>. Each state is a
-        population variable in the grid.
+        Enter ODE equations of the form <code>dState/dt = expression</code>.
       </p>
 
       <div v-if="world.equations.length === 0" class="empty-state">
@@ -83,26 +76,11 @@ function removeEquation(idx: number) {
   gap: 1rem;
 }
 
-.var-info {
-  display: flex;
-  align-items: center;
-  gap: 0.65rem;
-}
-
 .active-var-name {
   font-size: 1.15rem;
   font-weight: 700;
   margin: 0;
   color: #38bdf8;
-}
-
-.count-badge {
-  font-size: 0.72rem;
-  padding: 0.2rem 0.55rem;
-  border-radius: 10px;
-  background: #1e293b;
-  color: #94a3b8;
-  border: 1px solid #334155;
 }
 
 .model-body {

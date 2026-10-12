@@ -27,8 +27,7 @@
       </nav>
     </div>
 
-    <!-- Summary & Controls (visible on Model and Build tabs) -->
-    <div v-if="currentTab === 'build' || currentTab === 'model'" class="world-summary">
+    <div class="world-summary">
       <div class="summary-item">
         <label>World Name:</label>
         <input
