@@ -106,23 +106,36 @@
       </div>
 
       <!-- Grid -->
-      <div class="grid-scroll">
+      <div
+        ref="canvasContainerRef"
+        class="grid-canvas"
+        :class="{ 'is-panning': isPanning }"
+        @wheel.prevent="handleWheel"
+        @mousedown="handleMouseDown"
+      >
         <div
-          class="grid-board"
+          class="viewport-layer"
           :style="{
-            gridTemplateColumns: `repeat(${world.width}, 42px)`,
-            gridTemplateRows: `repeat(${world.height}, 42px)`
+            transform: `translate(${panX}px, ${panY}px) scale(${zoomLevel})`
           }"
         >
           <div
-            v-for="cell in flatCells"
-            :key="`${cell.r}-${cell.c}`"
-            class="grid-cell"
-            :style="{ backgroundColor: cellColor(cell.value) }"
-            :title="`[${cell.c}, ${cell.r}] = ${formatValue(cell.value)}`"
-            @click="openPopup(cell.r, cell.c, $event)"
+            class="grid-board"
+            :style="{
+              gridTemplateColumns: `repeat(${world.width}, 42px)`,
+              gridTemplateRows: `repeat(${world.height}, 42px)`
+            }"
           >
-            <span class="cell-text">{{ formatValue(cell.value) }}</span>
+            <div
+              v-for="cell in flatCells"
+              :key="`${cell.r}-${cell.c}`"
+              class="grid-cell"
+              :style="{ backgroundColor: cellColor(cell.value) }"
+              :title="`[${cell.c}, ${cell.r}] = ${formatValue(cell.value)}`"
+              @click="openPopup(cell.r, cell.c, $event)"
+            >
+              <span class="cell-text">{{ formatValue(cell.value) }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -226,6 +239,23 @@ const solverInput = ref('rk4');
 const currentStep = ref(0);
 const isPlaying = ref(false);
 let playbackTimer: number | null = null;
+
+// Zoom & pan state
+const canvasContainerRef = ref<HTMLElement | null>(null);
+const zoomLevel = ref(1);
+const panX = ref(0);
+const panY = ref(0);
+const isPanning = ref(false);
+let panStartX = 0;
+let panStartY = 0;
+let panStartPanX = 0;
+let panStartPanY = 0;
+let didDrag = false;
+
+const MIN_ZOOM = 0.3;
+const MAX_ZOOM = 4;
+const ZOOM_SENSITIVITY = 0.002;
+const PAN_THRESHOLD = 4;
 
 // Cell popup
 const popup = ref<{ r: number; c: number; x: number; y: number } | null>(null);
@@ -377,7 +407,60 @@ function formatValue(value: number): string {
 }
 
 function openPopup(r: number, c: number, event: MouseEvent) {
+  if (didDrag) return;
   popup.value = { r, c, x: event.clientX, y: event.clientY };
+}
+
+function handleWheel(e: WheelEvent) {
+  const container = canvasContainerRef.value;
+  if (!container) return;
+
+  const rect = container.getBoundingClientRect();
+  const mouseX = e.clientX - rect.left - rect.width / 2;
+  const mouseY = e.clientY - rect.top - rect.height / 2;
+
+  const oldZoom = zoomLevel.value;
+  const delta = -e.deltaY * ZOOM_SENSITIVITY;
+  const newZoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, oldZoom * (1 + delta)));
+  const scaleFactor = newZoom / oldZoom;
+
+  panX.value = mouseX - scaleFactor * (mouseX - panX.value);
+  panY.value = mouseY - scaleFactor * (mouseY - panY.value);
+  zoomLevel.value = newZoom;
+}
+
+function handleMouseDown(e: MouseEvent) {
+  if (e.button !== 0) return;
+
+  e.preventDefault();
+  didDrag = false;
+  panStartX = e.clientX;
+  panStartY = e.clientY;
+  panStartPanX = panX.value;
+  panStartPanY = panY.value;
+
+  window.addEventListener('mousemove', handlePanMove);
+  window.addEventListener('mouseup', handlePanEnd);
+}
+
+function handlePanMove(e: MouseEvent) {
+  const dx = e.clientX - panStartX;
+  const dy = e.clientY - panStartY;
+
+  if (!isPanning.value) {
+    if (Math.abs(dx) <= PAN_THRESHOLD && Math.abs(dy) <= PAN_THRESHOLD) return;
+    isPanning.value = true;
+    didDrag = true;
+  }
+
+  panX.value = panStartPanX + dx;
+  panY.value = panStartPanY + dy;
+}
+
+function handlePanEnd() {
+  isPanning.value = false;
+  window.removeEventListener('mousemove', handlePanMove);
+  window.removeEventListener('mouseup', handlePanEnd);
 }
 
 async function runSimulation() {
@@ -423,6 +506,8 @@ function pausePlayback() {
 
 onUnmounted(() => {
   pausePlayback();
+  window.removeEventListener('mousemove', handlePanMove);
+  window.removeEventListener('mouseup', handlePanEnd);
 });
 
 
@@ -564,14 +649,24 @@ watch(
 }
 
 /* Grid */
-.grid-scroll {
+.grid-canvas {
   flex: 1;
-  overflow: auto;
+  overflow: hidden;
   display: flex;
   justify-content: center;
-  align-items: flex-start;
-  padding: 1.5rem;
+  align-items: center;
   background: #080e1e;
+  position: relative;
+  cursor: grab;
+}
+
+.grid-canvas.is-panning {
+  cursor: grabbing;
+}
+
+.viewport-layer {
+  transform-origin: center center;
+  will-change: transform;
 }
 
 .grid-board {
