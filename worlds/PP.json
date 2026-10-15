@@ -28,7 +28,10 @@
       "keyframes": null,
       "data": [
         [
-          0.1
+          {
+            "type": "scalar",
+            "value": 1
+          }
         ]
       ]
     },
@@ -40,7 +43,10 @@
       "keyframes": null,
       "data": [
         [
-          0.01
+          {
+            "type": "scalar",
+            "value": 0.1
+          }
         ]
       ]
     },
@@ -52,7 +58,10 @@
       "keyframes": null,
       "data": [
         [
-          0.2
+          {
+            "type": "scalar",
+            "value": 1.5
+          }
         ]
       ]
     },
@@ -64,7 +73,10 @@
       "keyframes": null,
       "data": [
         [
-          0.005
+          {
+            "type": "scalar",
+            "value": 0.075
+          }
         ]
       ]
     },
@@ -76,7 +88,10 @@
       "keyframes": null,
       "data": [
         [
-          20
+          {
+            "type": "scalar",
+            "value": 40
+          }
         ]
       ]
     },
@@ -88,48 +103,9 @@
       "keyframes": null,
       "data": [
         [
-          10
-        ]
-      ]
-    },
-    {
-      "name": "Predators_dispersal",
-      "gridType": "static",
-      "variableType": "movement",
-      "categories": null,
-      "keyframes": null,
-      "data": [
-        [
           {
-            "n": 0,
-            "s": 0,
-            "e": 0,
-            "w": 0,
-            "ne": 0,
-            "nw": 0,
-            "se": 0,
-            "sw": 0
-          }
-        ]
-      ]
-    },
-    {
-      "name": "Prey_dispersal",
-      "gridType": "static",
-      "variableType": "movement",
-      "categories": null,
-      "keyframes": null,
-      "data": [
-        [
-          {
-            "n": 0,
-            "s": 0,
-            "e": 0,
-            "w": 0,
-            "ne": 0,
-            "nw": 0,
-            "se": 0,
-            "sw": 0
+            "type": "scalar",
+            "value": 9
           }
         ]
       ]

@@ -1,4 +1,5 @@
-import type { Keyframe } from '../types/world';
+import type { Keyframe, NumericDistribution } from '../types/world';
+import { distributionValue, scalarDistribution } from '../types/world';
 
 /**
  * Smoothstep interpolation factor: 3u^2 - 2u^3
@@ -17,7 +18,7 @@ export function generateDataCube(
   keyframes: Keyframe[],
   width: number,
   height: number
-): { dataCube: number[][][]; startStep: number; endStep: number } {
+): { dataCube: NumericDistribution[][][]; startStep: number; endStep: number } {
   if (!keyframes || keyframes.length === 0) {
     return { dataCube: [], startStep: 0, endStep: 0 };
   }
@@ -33,7 +34,7 @@ export function generateDataCube(
     return { dataCube: [sorted[0].data], startStep, endStep: startStep };
   }
 
-  const dataCube: number[][][] = [];
+  const dataCube: NumericDistribution[][][] = [];
 
   for (let s = startStep; s <= endStep; s++) {
     // Find surrounding keyframes
@@ -48,17 +49,17 @@ export function generateDataCube(
       }
     }
 
-    const grid: number[][] = [];
+    const grid: NumericDistribution[][] = [];
     const stepSpan = k1.step - k0.step;
     const factor = stepSpan === 0 ? 0 : smoothstep((s - k0.step) / stepSpan);
 
     for (let r = 0; r < height; r++) {
-      const row: number[] = [];
+      const row: NumericDistribution[] = [];
       for (let c = 0; c < width; c++) {
-        const v0 = k0.data[r]?.[c] ?? 0;
-        const v1 = k1.data[r]?.[c] ?? 0;
+        const v0 = distributionValue(k0.data[r]?.[c] ?? scalarDistribution(0));
+        const v1 = distributionValue(k1.data[r]?.[c] ?? scalarDistribution(0));
         const val = v0 + (v1 - v0) * factor;
-        row.push(Number(val.toFixed(2)));
+        row.push(scalarDistribution(Number(val.toFixed(2))));
       }
       grid.push(row);
     }

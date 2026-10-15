@@ -52,14 +52,63 @@
           />
         </div>
 
-        <!-- Numeric: Edit box with numeric value -->
+        <!-- Numeric: Distribution editor -->
         <div v-else class="numeric-editor">
+          <select v-model="selectedDistributionType" class="select-input">
+            <option value="scalar">Scalar</option>
+            <option v-if="variable.gridType !== 'timeVarying'" value="normal">Normal</option>
+            <option v-if="variable.gridType !== 'timeVarying'" value="uniform">Uniform</option>
+          </select>
+          <span v-if="selectedDistributionType === 'scalar'" class="parameter-label">Value</span>
           <input
-            v-model.number="selectedNumericValue"
+            v-if="selectedDistributionType === 'scalar'"
+            v-model.number="selectedScalarValue"
             type="number"
             step="any"
             class="number-input"
+            title="Value"
           />
+          <template v-else-if="selectedDistributionType === 'normal'">
+            <span class="parameter-label">Mean</span>
+            <input
+              v-model.number="selectedNormalMean"
+              type="number"
+              step="any"
+              class="number-input"
+              title="Mean"
+              placeholder="Mean"
+            />
+            <span class="parameter-label">Stddev</span>
+            <input
+              v-model.number="selectedNormalStddev"
+              type="number"
+              min="0"
+              step="any"
+              class="number-input"
+              title="Standard deviation"
+              placeholder="Stddev"
+            />
+          </template>
+          <template v-else>
+            <span class="parameter-label">Min</span>
+            <input
+              v-model.number="selectedUniformMin"
+              type="number"
+              step="any"
+              class="number-input"
+              title="Minimum"
+              placeholder="Min"
+            />
+            <span class="parameter-label">Max</span>
+            <input
+              v-model.number="selectedUniformMax"
+              type="number"
+              step="any"
+              class="number-input"
+              title="Maximum"
+              placeholder="Max"
+            />
+          </template>
         </div>
       </div>
 
@@ -73,20 +122,30 @@
         <span class="cube-inspect-badge">Data Cube Playback Mode (Read-Only)</span>
       </div>
 
-      <!-- Dispersion Slider (0 to 5) -->
-      <div v-if="isEditingEnabled && !isMovement" class="tool-section dispersion-control">
-        <label for="dispersionSlider" class="tool-label" :title="dispersionTooltip">
-          Brush: <strong class="dispersion-value">{{ dispersionRadius }}</strong>
+      <!-- Brush Slider (0 to 5) -->
+      <div v-if="isEditingEnabled && !isMovement" class="tool-section brush-control">
+        <label for="brushSlider" class="tool-label" :title="brushTooltip">
+          Brush: <strong class="brush-value">{{ brushRadius }}</strong>
         </label>
         <input
-          id="dispersionSlider"
-          v-model.number="dispersionRadius"
+          id="brushSlider"
+          v-model.number="brushRadius"
           type="range"
           min="0"
           max="5"
           step="1"
           class="slider"
         />
+      </div>
+
+      <div
+        v-if="isEditingEnabled && variable.variableType === 'numeric'"
+        class="tool-section"
+      >
+        <label class="toggle-label" :title="dampenTooltip">
+          <input v-model="dampen" type="checkbox" />
+          Dampen
+        </label>
       </div>
 
       <!-- Color scale selector -->
@@ -213,15 +272,20 @@
             class="grid-cell"
             :class="{
               'hovered': hoverCell?.r === cell.r && hoverCell?.c === cell.c,
-              'in-dispersion': isCellInDispersion(cell.r, cell.c)
+              'in-brush': isCellInBrush(cell.r, cell.c)
             }"
             :style="{ backgroundColor: getCellColor(cell.value) }"
             @mouseenter="hoverCell = { r: cell.r, c: cell.c }"
             @click="handleCellClick(cell.r, cell.c, $event)"
           >
-            <span v-if="showCellValues" class="cell-text">
-              {{ formatCellValue(cell.value) }}
-            </span>
+            <span
+              v-if="showCellValues"
+              class="cell-text distribution-values"
+            >{{ formatCellValue(cell.value) }}</span>
+            <span
+              v-else-if="variable.variableType === 'numeric'"
+              class="cell-text distribution-type"
+            >{{ getDistributionTypeLabel(cell.value) }}</span>
           </div>
         </div>
       </div>
@@ -365,10 +429,17 @@
 
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue';
-import type { Variable, MovementRates, World } from '../types/world';
+import type {
+  Variable,
+  MovementRates,
+  World,
+  DistributionType,
+  NumericDistribution,
+} from '../types/world';
 import {
   MOVEMENT_DIRECTIONS,
   createDefaultMovementRates,
+  distributionValue,
   movementSum,
 } from '../types/world';
 import { generateDataCube } from '../utils/interpolation';
@@ -402,6 +473,9 @@ watch(
     viewMode.value = 'keyframe';
     selectedKeyframeIndex.value = 0;
     currentStepIndex.value = 0;
+    if (props.variable.gridType === 'timeVarying') {
+      selectedDistributionType.value = 'scalar';
+    }
     movementEditor.value = null;
     if (props.variable.variableType === 'categorical' && props.variable.categories?.length) {
       selectedCategory.value = props.variable.categories[0];
@@ -416,17 +490,27 @@ const showCellValues = ref(false);
 
 // Tile Tools
 const selectedCategory = ref(props.variable.categories?.[0] || 'plain');
-const selectedNumericValue = ref(17);
+const selectedDistributionType = ref<DistributionType>('scalar');
+const selectedScalarValue = ref(17);
+const selectedNormalMean = ref(17);
+const selectedNormalStddev = ref(1);
+const selectedUniformMin = ref(0);
+const selectedUniformMax = ref(1);
 
-// Dispersion slider (0 to 5)
-const dispersionRadius = ref(0);
+// Brush radius (0 to 5)
+const brushRadius = ref(0);
+const dampen = ref(true);
 
-const dispersionTooltip = computed(() => {
+const brushTooltip = computed(() => {
   if (props.variable.variableType === 'categorical') {
-    return 'Categorical dispersion: Neighbouring cells within radius take the selected category.';
+    return 'Neighbouring cells within the brush radius take the selected category.';
   }
-  return 'Numerical dispersion: Neighbours take (1.0 - 0.5 * k) * inputValue at distance k.';
+  return dampen.value
+    ? 'Numerical brush values are reduced with distance from the selected cell.'
+    : 'Numerical brush values use the selected value across the brush radius.';
 });
+
+const dampenTooltip = 'Reduce numeric brush values with distance from the selected cell.';
 
 // Time-varying keyframes
 const selectedKeyframeIndex = ref(0);
@@ -546,7 +630,9 @@ const globalNumericBounds = computed(() => {
   let max = -Infinity;
 
   const checkVal = (v: any) => {
-    const n = Number(v);
+    const n = typeof v === 'object' && v !== null
+      ? distributionValue(v as NumericDistribution)
+      : Number(v);
     if (!isNaN(n)) {
       if (n < min) min = n;
       if (n > max) max = n;
@@ -626,10 +712,30 @@ function formatCellValue(val: any): string {
   if (props.variable.variableType === 'movement') {
     return movementSum(val).toFixed(2);
   }
+  if (props.variable.variableType === 'numeric' && val && typeof val === 'object') {
+    const distribution = val as NumericDistribution;
+    if (distribution.type === 'normal') {
+      const value = distribution.value as { mean: number; stddev: number };
+      return `mean: ${value.mean}\nstddev: ${value.stddev}`;
+    }
+    if (distribution.type === 'uniform') {
+      const value = distribution.value as { min: number; max: number };
+      return `min: ${value.min}\nmax: ${value.max}`;
+    }
+    return `value: ${Number(distribution.value).toFixed(2)}`;
+  }
   if (typeof val === 'number') {
     return Number.isInteger(val) ? val.toString() : val.toFixed(1);
   }
   return String(val ?? '');
+}
+
+function getDistributionTypeLabel(value: any): string {
+  if (value && typeof value === 'object') {
+    if (value.type === 'normal') return 'n';
+    if (value.type === 'uniform') return 'u';
+  }
+  return 's';
 }
 
 function getCellColor(value: any): string {
@@ -648,7 +754,11 @@ function getCellColor(value: any): string {
       selectedColormap.value
     );
   }
-  const num = typeof value === 'number' ? value : parseFloat(value) || 0;
+  const num = typeof value === 'object' && value !== null
+    ? distributionValue(value as NumericDistribution)
+    : typeof value === 'number'
+      ? value
+      : parseFloat(value) || 0;
   return getNumericColor(num, numericMin.value, numericMax.value, selectedColormap.value);
 }
 
@@ -660,12 +770,40 @@ const getLinearGradientCss = computed(() => {
   return `linear-gradient(to right, ${stops})`;
 });
 
-// Dispersion calculation
-function isCellInDispersion(r: number, c: number): boolean {
+// Brush highlight calculation
+function isCellInBrush(r: number, c: number): boolean {
   if (isMovement.value) return false;
-  if (!hoverCell.value || dispersionRadius.value <= 0 || !isEditingEnabled.value) return false;
+  if (!hoverCell.value || brushRadius.value <= 0 || !isEditingEnabled.value) return false;
   const dist = Math.max(Math.abs(r - hoverCell.value.r), Math.abs(c - hoverCell.value.c));
-  return dist <= dispersionRadius.value;
+  return dist <= brushRadius.value;
+}
+
+function createBrushDistribution(distance: number): NumericDistribution {
+  const factor = dampen.value ? Math.pow(0.95, distance) : 1;
+
+  if (selectedDistributionType.value === 'normal') {
+    return {
+      type: 'normal',
+      value: {
+        mean: (Number(selectedNormalMean.value) || 0) * factor,
+        stddev: Math.max(0, Number(selectedNormalStddev.value) || 0) * factor,
+      },
+    };
+  }
+
+  if (selectedDistributionType.value === 'uniform') {
+    const min = (Number(selectedUniformMin.value) || 0) * factor;
+    const max = (Number(selectedUniformMax.value) || 0) * factor;
+    return {
+      type: 'uniform',
+      value: { min: Math.min(min, max), max: Math.max(min, max) },
+    };
+  }
+
+  return {
+    type: 'scalar',
+    value: (Number(selectedScalarValue.value) || 0) * factor,
+  };
 }
 
 function handleCellClick(targetR: number, targetC: number, event?: MouseEvent) {
@@ -678,8 +816,7 @@ function handleCellClick(targetR: number, targetC: number, event?: MouseEvent) {
   }
 
   const isCategorical = props.variable.variableType === 'categorical';
-  const radius = dispersionRadius.value;
-  const inputVal = selectedNumericValue.value;
+  const radius = brushRadius.value;
   const catVal = selectedCategory.value;
 
   // Clone grid to update
@@ -694,11 +831,7 @@ function handleCellClick(targetR: number, targetC: number, event?: MouseEvent) {
           // Categorical: neighbours take what user selected
           grid[r][c] = catVal;
         } else {
-          // Numerical: fraction (1.0 - 0.5 * k) * inputValue
-          // Clamp at 0 to prevent negative values for k >= 2
-          const factor = Math.max(0, 1.0 - 0.5 * k);
-          const cellVal = factor * inputVal;
-          grid[r][c] = Number(cellVal.toFixed(2));
+          grid[r][c] = createBrushDistribution(k);
         }
       }
     }
@@ -1145,13 +1278,13 @@ onUnmounted(() => {
   display: inline-block;
 }
 
-.dispersion-control {
+.brush-control {
   display: flex;
   align-items: center;
   gap: 0.4rem;
 }
 
-.dispersion-value {
+.brush-value {
   color: #38bdf8;
   font-size: 0.95rem;
 }
@@ -1315,7 +1448,7 @@ onUnmounted(() => {
   z-index: 2;
 }
 
-.grid-cell.in-dispersion {
+.grid-cell.in-brush {
   box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.7);
 }
 
@@ -1328,6 +1461,21 @@ onUnmounted(() => {
   white-space: nowrap;
   max-width: 28px;
   padding: 0 1px;
+}
+
+.distribution-type {
+  font-size: 0.8rem;
+}
+
+.distribution-values {
+  white-space: pre-line;
+  line-height: 1.15;
+}
+
+.parameter-label {
+  color: #94a3b8;
+  font-size: 0.7rem;
+  white-space: nowrap;
 }
 
 /* Footer / Legend */

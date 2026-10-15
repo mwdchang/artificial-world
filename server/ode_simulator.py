@@ -6,8 +6,8 @@ instead of hardcoded values.
 
 World mapping:
   - world["equations"]                  ODE system (list of "dState/dt = expr")
-  - numeric variable named <state>      initial condition for that state
-  - numeric variable named <parameter>  value for a non-state equation symbol
+  - numeric variable named <state>      distribution grid sampled for that state
+  - numeric variable named <parameter>  distribution grid sampled for a parameter
   - movement variable named
     "<state>_dispersal"                 per-cell 8-direction movement rates
                                         for that state
@@ -25,6 +25,8 @@ import re
 from pathlib import Path
 
 import jax.numpy as jnp
+
+from sim_sampler import SimSampler
 
 from grid_ode import (
     create_movement,
@@ -97,19 +99,19 @@ def extract_grid(variable):
     return data
 
 
-def validate_grid(grid, height, width, label):
-    if not isinstance(grid, list) or len(grid) != height:
-        raise ValueError(
-            f"Variable '{label}' grid does not match world size {width}x{height}"
-        )
-    for row in grid:
-        if not isinstance(row, list) or len(row) != width:
-            raise ValueError(
-                f"Variable '{label}' grid does not match world size {width}x{height}"
-            )
+def sample_numeric_grid(variable, height, width, sampler):
+    grid = extract_grid(variable)
+    if variable.get("gridType") == "timeVarying":
+        for row in grid or []:
+            for cell in row or []:
+                if not isinstance(cell, dict) or cell.get("type") != "scalar":
+                    raise ValueError(
+                        "Time-varying numeric variables currently support only scalar distributions"
+                    )
+    return sampler.grid(grid, height, width, variable.get("name", "numeric"))
 
 
-def build_initial_conditions(world, states):
+def build_initial_conditions(world, states, sampler):
     height, width = world["height"], world["width"]
     initial = {}
     for state in states:
@@ -118,13 +120,11 @@ def build_initial_conditions(world, states):
             raise ValueError(
                 f"ODE state '{state}' has no numeric variable named '{state}'"
             )
-        grid = extract_grid(variable)
-        validate_grid(grid, height, width, state)
-        initial[state] = grid
+        initial[state] = sample_numeric_grid(variable, height, width, sampler)
     return initial
 
 
-def build_parameters(world, parameters):
+def build_parameters(world, parameters, sampler):
     height, width = world["height"], world["width"]
     resolved = {}
     for name in parameters:
@@ -133,9 +133,7 @@ def build_parameters(world, parameters):
             raise ValueError(
                 f"Parameter '{name}' has no numeric variable named '{name}'"
             )
-        grid = extract_grid(variable)
-        validate_grid(grid, height, width, name)
-        resolved[name] = grid
+        resolved[name] = sample_numeric_grid(variable, height, width, sampler)
     return resolved
 
 
@@ -260,8 +258,9 @@ def main(argv=None):
 
         model = parse_system(world["equations"], width=width, height=height)
         model = sanitize_local_rhs(model)
-        initial = build_initial_conditions(world, model["states"])
-        parameters = build_parameters(world, model["parameters"])
+        sampler = SimSampler()
+        initial = build_initial_conditions(world, model["states"], sampler)
+        parameters = build_parameters(world, model["parameters"], sampler)
         movement = build_movement(world, model, args.wrap)
 
         result = simulate(

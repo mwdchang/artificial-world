@@ -1,9 +1,31 @@
 export type GridType = 'static' | 'timeVarying';
 export type VariableType = 'numeric' | 'categorical' | 'movement';
+export type DistributionType = 'scalar' | 'normal' | 'uniform';
+
+export interface NumericDistribution {
+  type: DistributionType;
+  value: number | { mean: number; stddev: number } | { min: number; max: number };
+}
+
+export function scalarDistribution(value = 0): NumericDistribution {
+  return { type: 'scalar', value };
+}
+
+export function distributionValue(distribution: NumericDistribution): number {
+  if (distribution.type === 'normal') {
+    const value = distribution.value as { mean: number; stddev: number };
+    return value.mean;
+  }
+  if (distribution.type === 'uniform') {
+    const value = distribution.value as { min: number; max: number };
+    return (value.min + value.max) / 2;
+  }
+  return Number(distribution.value) || 0;
+}
 
 export interface Keyframe {
   step: number;
-  data: number[][];
+  data: NumericDistribution[][];
 }
 
 export interface MovementRates {
@@ -56,8 +78,8 @@ export interface Variable {
   variableType: VariableType;
   categories: string[] | null;
   keyframes: Keyframe[] | null;
-  // For static: 2D array [row][col] (strings or numbers)
-  // For timeVarying: 3D data cube [stepIndex][row][col] (numbers)
+  // For static: 2D array [row][col] (strings, movement rates, or distributions)
+  // For timeVarying: 3D data cube [stepIndex][row][col] (scalar distributions)
   data: any[][];
 }
 
@@ -86,17 +108,19 @@ export function createDefaultWorld(name = 'New World', width = 10, height = 10):
   };
 
   // 2. temperature (timeVarying, numeric, steps [0, 20], default 15)
-  const defaultTemp = 15;
-  const tempGridStep0: number[][] = Array.from({ length: height }, () =>
-    Array.from({ length: width }, () => defaultTemp)
+  const defaultTemp = scalarDistribution(15);
+  const tempGridStep0: NumericDistribution[][] = Array.from({ length: height }, () =>
+    Array.from({ length: width }, () => ({ ...defaultTemp }))
   );
-  const tempGridStep20: number[][] = Array.from({ length: height }, () =>
-    Array.from({ length: width }, () => defaultTemp)
+  const tempGridStep20: NumericDistribution[][] = Array.from({ length: height }, () =>
+    Array.from({ length: width }, () => ({ ...defaultTemp }))
   );
 
   // Generate initial data cube for steps 0 to 20 (21 steps)
-  const tempCube: number[][][] = Array.from({ length: 21 }, () =>
-    Array.from({ length: height }, () => Array.from({ length: width }, () => defaultTemp))
+  const tempCube: NumericDistribution[][][] = Array.from({ length: 21 }, () =>
+    Array.from({ length: height }, () =>
+      Array.from({ length: width }, () => ({ ...defaultTemp }))
+    )
   );
 
   const temperatureVariable: Variable = {

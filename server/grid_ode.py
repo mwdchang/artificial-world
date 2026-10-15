@@ -6,6 +6,8 @@ import jax
 import jax.numpy as jnp
 import sympy as sp
 
+jax.config.update("jax_enable_x64", True)
+
 # JAX defaults to float32; ODE integrators accumulate error over many
 # steps, so switch to float64 globally before creating any arrays.
 jax.config.update("jax_enable_x64", True)

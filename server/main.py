@@ -51,8 +51,9 @@ def run_simulation(world_path, steps, dt=0.1, movement_mode="continuous", wrap=F
 
     model = ode_simulator.parse_system(world["equations"], width=width, height=height)
     model = ode_simulator.sanitize_local_rhs(model)
-    initial = ode_simulator.build_initial_conditions(world, model["states"])
-    parameters = ode_simulator.build_parameters(world, model["parameters"])
+    sampler = ode_simulator.SimSampler()
+    initial = ode_simulator.build_initial_conditions(world, model["states"], sampler)
+    parameters = ode_simulator.build_parameters(world, model["parameters"], sampler)
     movement = ode_simulator.build_movement(world, model, wrap)
 
     result = ode_simulator.simulate(

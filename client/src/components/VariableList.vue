@@ -121,8 +121,38 @@
         </div>
 
         <div v-if="newVarType === 'numeric'" class="form-group">
-          <label>Default Initial Value</label>
-          <input v-model.number="newDefaultNumeric" type="number" step="any" />
+          <label>Default Initial Distribution</label>
+          <select
+            v-if="newGridType === 'static'"
+            v-model="newDistributionType"
+            class="form-select"
+          >
+            <option value="scalar">Scalar</option>
+            <option value="normal">Normal</option>
+            <option value="uniform">Uniform</option>
+          </select>
+
+          <label v-if="newDistributionType === 'scalar'">Value</label>
+          <input
+            v-if="newDistributionType === 'scalar'"
+            v-model.number="newDefaultNumeric"
+            type="number"
+            step="any"
+          />
+
+          <template v-else-if="newDistributionType === 'normal'">
+            <label>Mean</label>
+            <input v-model.number="newNormalMean" type="number" step="any" />
+            <label>Standard deviation</label>
+            <input v-model.number="newNormalStddev" type="number" min="0" step="any" />
+          </template>
+
+          <template v-else>
+            <label>Minimum</label>
+            <input v-model.number="newUniformMin" type="number" step="any" />
+            <label>Maximum</label>
+            <input v-model.number="newUniformMax" type="number" step="any" />
+          </template>
         </div>
 
         <div v-if="newVarType === 'movement'" class="form-group">
@@ -149,8 +179,14 @@
 
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import type { Variable, GridType, VariableType } from '../types/world';
-import { createDefaultMovementRates } from '../types/world';
+import type {
+  Variable,
+  GridType,
+  VariableType,
+  DistributionType,
+  NumericDistribution,
+} from '../types/world';
+import { createDefaultMovementRates, scalarDistribution } from '../types/world';
 import { generateDataCube } from '../utils/interpolation';
 
 const props = defineProps<{
@@ -173,12 +209,18 @@ const newGridType = ref<GridType>('static');
 const newVarType = ref<VariableType>('numeric');
 const newCategoriesInput = ref('catA, catB, catC');
 const newDefaultNumeric = ref(0);
+const newDistributionType = ref<DistributionType>('scalar');
+const newNormalMean = ref(0);
+const newNormalStddev = ref(1);
+const newUniformMin = ref(0);
+const newUniformMax = ref(1);
 const newDefaultMovement = ref(0.01);
 
 // Auto-switch variableType to numeric if timeVarying is selected
 watch(newGridType, (val) => {
   if (val === 'timeVarying') {
     newVarType.value = 'numeric';
+    newDistributionType.value = 'scalar';
   }
 });
 
@@ -204,6 +246,27 @@ function confirmAdd() {
   const name = newVarName.value.trim();
   const width = props.worldWidth;
   const height = props.worldHeight;
+
+  function createDefaultNumericDistribution(): NumericDistribution {
+    if (newGridType.value === 'timeVarying' || newDistributionType.value === 'scalar') {
+      return scalarDistribution(Number(newDefaultNumeric.value) || 0);
+    }
+    if (newDistributionType.value === 'normal') {
+      return {
+        type: 'normal',
+        value: {
+          mean: Number(newNormalMean.value) || 0,
+          stddev: Math.max(0, Number(newNormalStddev.value) || 0),
+        },
+      };
+    }
+    const min = Number(newUniformMin.value) || 0;
+    const max = Number(newUniformMax.value) || 0;
+    return {
+      type: 'uniform',
+      value: { min: Math.min(min, max), max: Math.max(min, max) },
+    };
+  }
 
   if (newVarType.value === 'movement') {
     const rate = Math.max(0, Math.min(1, Number(newDefaultMovement.value) || 0));
@@ -239,9 +302,9 @@ function confirmAdd() {
         data,
       });
     } else {
-      const defaultVal = Number(newDefaultNumeric.value || 0);
+      const defaultDistribution = createDefaultNumericDistribution();
       const data = Array.from({ length: height }, () =>
-        Array.from({ length: width }, () => defaultVal)
+        Array.from({ length: width }, () => structuredClone(defaultDistribution))
       );
 
       emit('addVariable', {
@@ -255,12 +318,12 @@ function confirmAdd() {
     }
   } else {
     // Time-varying (numeric only)
-    const defaultVal = Number(newDefaultNumeric.value || 0);
+    const defaultDistribution = scalarDistribution(Number(newDefaultNumeric.value) || 0);
     const grid0 = Array.from({ length: height }, () =>
-      Array.from({ length: width }, () => defaultVal)
+      Array.from({ length: width }, () => ({ ...defaultDistribution }))
     );
     const grid20 = Array.from({ length: height }, () =>
-      Array.from({ length: width }, () => defaultVal)
+      Array.from({ length: width }, () => ({ ...defaultDistribution }))
     );
 
     const keyframes = [
@@ -284,6 +347,11 @@ function confirmAdd() {
   newVarName.value = '';
   newCategoriesInput.value = 'catA, catB, catC';
   newDefaultNumeric.value = 0;
+  newDistributionType.value = 'scalar';
+  newNormalMean.value = 0;
+  newNormalStddev.value = 1;
+  newUniformMin.value = 0;
+  newUniformMax.value = 1;
   newDefaultMovement.value = 0.01;
   newVarType.value = 'numeric';
   newGridType.value = 'static';
@@ -493,7 +561,8 @@ function confirmDelete(idx: number) {
 }
 
 .form-group input[type="text"],
-.form-group input[type="number"] {
+.form-group input[type="number"],
+.form-group select {
   background: #111827;
   border: 1px solid #374151;
   color: #f9fafb;
