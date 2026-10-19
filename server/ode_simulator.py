@@ -21,6 +21,7 @@ Usage:
 
 import argparse
 import json
+import math
 import re
 from pathlib import Path
 
@@ -82,33 +83,49 @@ def find_variable(world, name, variable_type=None):
 
 
 def extract_grid(variable):
-    """Return a single (height, width) grid for a numeric variable."""
-    grid_type = variable.get("gridType")
+    """Return a single static (height, width) grid."""
     data = variable.get("data")
+    return data
 
-    if grid_type == "timeVarying":
-        if isinstance(data, list) and data:
-            return data[0]
-        keyframes = variable.get("keyframes") or []
-        if keyframes:
-            return keyframes[0].get("data")
+
+def extract_time_varying_frames(variable):
+    """Return all time slices for a time-varying numeric variable."""
+    data = variable.get("data")
+    if not isinstance(data, list) or not data:
         raise ValueError(
-            f"Time-varying variable '{variable.get('name')}' has no frames"
+            f"Time-varying variable '{variable.get('name')}' has no data frames"
         )
-
     return data
 
 
 def sample_numeric_grid(variable, height, width, sampler):
-    grid = extract_grid(variable)
-    if variable.get("gridType") == "timeVarying":
-        for row in grid or []:
+    return sampler.grid(
+        extract_grid(variable), height, width, variable.get("name", "numeric")
+    )
+
+
+def sample_time_varying_grids(variable, height, width, sampler, steps, dt):
+    frames = extract_time_varying_frames(variable)
+    required_frames = math.floor(steps / dt) + 1
+    if len(frames) != required_frames:
+        raise ValueError(
+            f"Simulate wants {required_frames} frames, but variable '{variable.get('name')}' has {len(frames)}"
+        )
+
+    sampled = []
+    for frame in frames:
+        for row in frame or []:
             for cell in row or []:
                 if not isinstance(cell, dict) or cell.get("type") != "scalar":
                     raise ValueError(
                         "Time-varying numeric variables currently support only scalar distributions"
                     )
-    return sampler.grid(grid, height, width, variable.get("name", "numeric"))
+        sampled.append(
+            sampler.grid(
+                frame, height, width, variable.get("name", "numeric")
+            )
+        )
+    return sampled
 
 
 def build_initial_conditions(world, states, sampler):
@@ -120,21 +137,32 @@ def build_initial_conditions(world, states, sampler):
             raise ValueError(
                 f"ODE state '{state}' has no numeric variable named '{state}'"
             )
+        if variable.get("gridType") != "static":
+            raise ValueError(
+                f"ODE state '{state}' must be static because time-varying "
+                "variables cannot have equations"
+            )
         initial[state] = sample_numeric_grid(variable, height, width, sampler)
     return initial
 
 
-def build_parameters(world, parameters, sampler):
+def build_parameters(world, parameters, sampler, steps, dt):
     height, width = world["height"], world["width"]
     resolved = {}
+    time_varying = {}
     for name in parameters:
         variable = find_variable(world, name, "numeric")
         if variable is None:
             raise ValueError(
                 f"Parameter '{name}' has no numeric variable named '{name}'"
             )
-        resolved[name] = sample_numeric_grid(variable, height, width, sampler)
-    return resolved
+        if variable.get("gridType") == "timeVarying":
+            time_varying[name] = sample_time_varying_grids(
+                variable, height, width, sampler, steps, dt
+            )
+        else:
+            resolved[name] = sample_numeric_grid(variable, height, width, sampler)
+    return resolved, time_varying
 
 
 def sanitize_local_rhs(model):
@@ -260,7 +288,9 @@ def main(argv=None):
         model = sanitize_local_rhs(model)
         sampler = SimSampler()
         initial = build_initial_conditions(world, model["states"], sampler)
-        parameters = build_parameters(world, model["parameters"], sampler)
+        parameters, time_varying_parameters = build_parameters(
+            world, model["parameters"], sampler, args.steps, args.dt
+        )
         movement = build_movement(world, model, args.wrap)
 
         result = simulate(
@@ -272,6 +302,7 @@ def main(argv=None):
             movement=movement,
             movement_mode=args.movement_mode,
             solver=args.solver,
+            time_varying_parameters=time_varying_parameters,
         )
     except ValueError as err:
         raise SystemExit(f"error: {err}")

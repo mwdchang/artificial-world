@@ -1,5 +1,6 @@
 import ast
 import json
+import math
 import re
 
 import jax
@@ -363,6 +364,7 @@ def simulate(
     movement=None,
     movement_mode="continuous",
     solver="rk4",
+    time_varying_parameters=None,
 ):
     """
     movement_mode:
@@ -389,10 +391,6 @@ def simulate(
         )
     if solver not in SOLVERS:
         raise ValueError(f"solver must be one of {SOLVERS}")
-
-    missing = set(model["parameters"]) - set(parameters)
-    if missing:
-        raise ValueError(f"Missing parameters: {sorted(missing)}")
 
     missing_states = set(model["states"]) - set(initial_conditions)
     extra_states = set(initial_conditions) - set(model["states"])
@@ -424,7 +422,22 @@ def simulate(
         axis=-1,
     )
 
-    params = {p: grid_array(parameters[p]) for p in model["parameters"]}
+    params = {p: grid_array(parameters[p]) for p in parameters}
+    dynamic_params = {}
+    time_varying_parameters = time_varying_parameters or {}
+    required_frames = math.floor(steps / dt) + 1
+    for name, frames in time_varying_parameters.items():
+        if name not in model["parameters"]:
+            raise ValueError(f"Unknown time-varying parameter: {name}")
+        if len(frames) != required_frames:
+            raise ValueError(
+                f"Simulate wants {required_frames} frames, but variable '{name}' has {len(frames)}"
+            )
+        dynamic_params[name] = jnp.stack([grid_array(frame) for frame in frames])
+
+    missing = set(model["parameters"]) - set(params) - set(dynamic_params)
+    if missing:
+        raise ValueError(f"Missing parameters: {sorted(missing)}")
     local_rhs = model["rhs"]
 
     if movement is not None:
@@ -448,8 +461,8 @@ def simulate(
     # the movement term. In discrete mode movement is applied separately
     # after the local step (see `advance`), so it is added here only when
     # continuous.
-    def full_rhs(y):
-        dy = local_rhs(y, params)
+    def full_rhs(y, step_params):
+        dy = local_rhs(y, step_params)
         if movement is not None and movement_mode == "continuous":
             dy = dy + movement_delta(y, model, movement, rates)
         return dy
@@ -458,39 +471,39 @@ def simulate(
     # `full_rhs`, which is what lets JAX trace and compile them.
 
     # Forward Euler: one evaluation, first-order accurate.
-    def euler_step(y):
-        return y + dt * full_rhs(y)
+    def euler_step(y, step_params):
+        return y + dt * full_rhs(y, step_params)
 
     # Classic 4th-order Runge-Kutta.
-    def rk4_step(y):
-        k1 = full_rhs(y)
-        k2 = full_rhs(y + (dt / 2) * k1)
-        k3 = full_rhs(y + (dt / 2) * k2)
-        k4 = full_rhs(y + dt * k3)
+    def rk4_step(y, step_params):
+        k1 = full_rhs(y, step_params)
+        k2 = full_rhs(y + (dt / 2) * k1, step_params)
+        k3 = full_rhs(y + (dt / 2) * k2, step_params)
+        k4 = full_rhs(y + dt * k3, step_params)
         return y + (dt / 6) * (k1 + 2*k2 + 2*k3 + k4)
 
     # Dormand-Prince 5(4) - the 5th-order solution of the embedded RK45
     # pair. Six evaluations per step give 5th-order accuracy (the extra
     # stage needed only for the embedded error estimate is omitted since
     # the output is sampled on a fixed grid).
-    def rk45_step(y):
-        k1 = full_rhs(y)
-        k2 = full_rhs(y + dt * (1/5) * k1)
-        k3 = full_rhs(y + dt * (3/40 * k1 + 9/40 * k2))
+    def rk45_step(y, step_params):
+        k1 = full_rhs(y, step_params)
+        k2 = full_rhs(y + dt * (1/5) * k1, step_params)
+        k3 = full_rhs(y + dt * (3/40 * k1 + 9/40 * k2), step_params)
         k4 = full_rhs(
-            y + dt * (44/45 * k1 - 56/15 * k2 + 32/9 * k3)
+            y + dt * (44/45 * k1 - 56/15 * k2 + 32/9 * k3), step_params
         )
         k5 = full_rhs(
             y + dt * (
                 19372/6561 * k1 - 25360/2187 * k2
                 + 64448/6561 * k3 - 212/729 * k4
-            )
+            ), step_params
         )
         k6 = full_rhs(
             y + dt * (
                 9017/3168 * k1 - 355/33 * k2 + 46732/5247 * k3
                 + 49/176 * k4 - 5103/18656 * k5
-            )
+            ), step_params
         )
         return y + dt * (
             35/384 * k1 + 500/1113 * k3 + 125/192 * k4
@@ -503,9 +516,16 @@ def simulate(
         "rk45": rk45_step,
     }[solver]
 
-    def advance(y, _):
+    def advance(y, step_index):
+        frame_index = jnp.floor(step_index * dt).astype(jnp.int32)
+        step_params = {
+            name: frames[frame_index]
+            for name, frames in dynamic_params.items()
+        }
+        step_params = {**params, **step_params}
+
         # Always integrate local ODEs first.
-        y_next = step_local(y)
+        y_next = step_local(y, step_params)
 
         # Discrete movement happens after the local ODE step.
         if movement is not None and movement_mode == "discrete":
@@ -521,11 +541,11 @@ def simulate(
     def integrate(y):
         # jax.lax.scan is the JIT-friendly replacement for a Python loop:
         # the `steps` count is static, so the body is traced once and
-        # executed without per-iteration Python overhead. `None` is a
-        # dummy xs for the step index. We prepend y0 to the stacked
+        # executed without per-iteration Python overhead. The scan index
+        # selects time-varying parameter slices. We prepend y0 to the stacked
         # per-step outputs to get steps+1 saved frames.
         _, tail = jax.lax.scan(
-            advance, y, None, length=steps
+            advance, y, jnp.arange(steps)
         )
         return jnp.concatenate([y[jnp.newaxis, ...], tail], axis=0)
 

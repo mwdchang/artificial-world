@@ -53,7 +53,9 @@ def run_simulation(world_path, steps, dt=0.1, movement_mode="continuous", wrap=F
     model = ode_simulator.sanitize_local_rhs(model)
     sampler = ode_simulator.SimSampler()
     initial = ode_simulator.build_initial_conditions(world, model["states"], sampler)
-    parameters = ode_simulator.build_parameters(world, model["parameters"], sampler)
+    parameters, time_varying_parameters = ode_simulator.build_parameters(
+        world, model["parameters"], sampler, steps, dt
+    )
     movement = ode_simulator.build_movement(world, model, wrap)
 
     result = ode_simulator.simulate(
@@ -65,6 +67,7 @@ def run_simulation(world_path, steps, dt=0.1, movement_mode="continuous", wrap=F
         movement=movement,
         movement_mode=movement_mode,
         solver=solver,
+        time_varying_parameters=time_varying_parameters,
     )
 
     world_name = world.get("name") or world_path.stem
